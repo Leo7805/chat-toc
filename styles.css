@@ -3,6 +3,7 @@
   right: 0;
   top: 0;
   width: 300px;
+  min-width: 300px;
   height: 100vh;
   background: #111827;
   color: white;
@@ -26,8 +27,8 @@
 }
 
 /* Hidden State */
-.hidden {
-  display: none;
+#conversation-navigator-sidebar.navigator-hidden {
+  display: none !important;
 }
 
 #toggle-sidebar-btn {
@@ -49,8 +50,41 @@
   border-radius: 6px;
   cursor: pointer;
   line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .navigator-item:hover {
   background: #374151;
+}
+
+#navigator-tooltip {
+  position: fixed;
+  right: 320px;
+  top: 80px;
+
+  width: 420px;
+  max-height: 70vh;
+
+  overflow-y: auto;
+
+  background: #0b1d42;
+  color: white;
+
+  border: 1px solid #374151;
+  border-radius: 10px;
+
+  padding: 12px;
+
+  white-space: pre-wrap;
+  line-height: 1.5;
+
+  z-index: 1000001;
+
+  display: none;
+}
+
+#navigator-tooltip.visible {
+  display: block;
 }
