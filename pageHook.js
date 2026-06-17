@@ -45,7 +45,9 @@
         console.log('✅ [Navigator] fetch:', url);
 
         streamBuffer = '';
-        inspectStream(response); // ❤️ Test - Inspect the message sending response stream
+        inspectStream(response).catch((error) => {
+          console.warn('[Navigator] stream inspect failed:', error);
+        });
       }
     } catch (error) {
       console.warn('[Navigator] fetch hook error:', error);
@@ -67,7 +69,9 @@
   }
 
   function getFetchMethod(input, init) {
-    return init.method || (input instanceof Request ? input.method : 'GET');
+    return (
+      init.method || (input instanceof Request ? input.method : 'GET')
+    ).toUpperCase();
   }
 
   function postConversationData(response) {
@@ -86,26 +90,6 @@
       .catch(() => {});
   }
 
-  // ❤️ Test - Listen for messages from the fetch hook
-  // async function inspectStream(response) {
-  //   const reader = response.clone().body?.getReader();
-
-  //   if (!reader) return;
-
-  //   const decoder = new TextDecoder();
-
-  //   while (true) {
-  //     const { done, value } = await reader.read();
-
-  //     if (done) break;
-
-  //     const chunk = decoder.decode(value);
-
-  //     console.log(chunk);
-
-  //     parseStreamChunk(chunk);
-  //   }
-  // }
   async function inspectStream(response) {
     const reader = response.clone().body?.getReader();
 
@@ -133,48 +117,10 @@
     }
   }
 
-  // function parseStreamChunk(chunk) {
-  //   const lines = chunk.split('\n');
-
-  //   for (const line of lines) {
-  //     if (!line.startsWith('data: ')) {
-  //       continue;
-  //     }
-
-  //     const jsonText = line.slice(6).trim();
-
-  //     if (!jsonText || jsonText === '[DONE]') {
-  //       continue;
-  //     }
-
-  //     try {
-  //       const data = JSON.parse(jsonText);
-
-  //       if (data.type === 'input_message') {
-  //         const message = data.input_message;
-
-  //         window.postMessage(
-  //           {
-  //             type: 'CHATGPT_NEW_USER_MESSAGE',
-  //             payload: {
-  //               id: message.id,
-  //               text: message.content?.parts?.join('\n') || '',
-  //               createTime: message.create_time || Date.now(),
-  //             },
-  //           },
-  //           '*'
-  //         );
-  //       }
-  //     } catch {
-  //       // ignore
-  //     }
-  //   }
-  // }
-
   function processBufferedStream() {
     const lines = streamBuffer.split('\n');
 
-    // 最后一行可能是不完整的
+    // The last line may be incomplete.
     streamBuffer = lines.pop() || '';
 
     for (const line of lines) {

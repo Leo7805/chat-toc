@@ -2,7 +2,19 @@ console.log('ChatGPT Conversation Navigator loaded');
 
 // const collectedMessages = new Map();
 let conversationMessages = [];
-let tooltipHideTimer = null;
+let tooltipHideTimer = null; // Hide tooltip with a delay to allow mouseenter on the tooltip itself when moving from the item to the tooltip
+let tooltipShowTimer = null; // show tooltip with a delay to avoid flickering when quickly moving mouse in and out of the item
+let navigatorSearchQuery = ''; // filter navigator items by this query, set by the search input in the sidebar
+
+/* Use to highlight current prompt*/
+let navigatorItems = [];
+let activePromptObserver = null;
+let activePromptMutationObserver = null;
+let activePromptMutationTimer = null;
+
+const NAVIGATOR_EMPTY_HINT_TEXT = 'Waiting for prompts...';
+const TOOLTIP_SHOW_DELAY_MS = 500;
+const TOOLTIP_HIDE_DELAY_MS = 200;
 
 /**
  * Injects pageHook.js into the real page context.
@@ -20,78 +32,6 @@ function injectFetchHook() {
 
   document.documentElement.appendChild(script);
 }
-
-// async function fetchCurrentConversation() {
-//   const match = location.pathname.match(/\/c\/([^/]+)/);
-//   const conversationId = match?.[1];
-
-//   if (!conversationId) {
-//     console.log('[Navigator] no conversation id in url');
-//     return;
-//   }
-
-//   const url = `/backend-api/conversation/${conversationId}`;
-
-//   console.log('[Navigator] manual fetch:', url);
-
-//   const res = await fetch(url);
-
-//   if (!res.ok) {
-//     console.warn('[Navigator] manual fetch failed:', res.status, url);
-//     return;
-//   }
-
-//   const data = await res.json();
-//   const messages = extractUserMessages(data);
-
-//   buildNavigator(messages);
-// }
-
-// async function fetchCurrentConversation() {
-//   const match = location.pathname.match(/\/c\/([^/]+)/);
-//   const conversationId = match?.[1];
-
-//   if (!conversationId) {
-//     console.log('[Navigator] no conversation id in url');
-//     return;
-//   }
-
-//   const url = `/backend-api/conversation/${conversationId}`;
-
-//   console.log('[Navigator] manual fetch:', url);
-
-//   try {
-//     const res = await fetch(url);
-
-//     if (!res.ok) {
-//       console.warn('[Navigator] manual fetch failed:', res.status);
-//       return;
-//     }
-
-//     const data = await res.json();
-//     const messages = extractUserMessages(data);
-
-//     // updateNavigator('manual-fetch', messages);
-//     buildNavigator(messages);
-//   } catch (error) {
-//     console.warn('[Navigator] manual fetch error:', error);
-//   }
-// }
-
-/**
- * Listens for URL changes to detect when the user switches conversations or starts a new one.
- */
-// function listenForUrlChanges() {
-//   let lastUrl = location.href;
-
-//   setInterval(() => {
-//     if (location.href !== lastUrl) {
-//       lastUrl = location.href;
-//       console.log('[Navigator] url changed:', lastUrl);
-//       fetchCurrentConversation();
-//     }
-//   }, 500);
-// }
 
 function waitForBody() {
   return new Promise((resolve) => {
@@ -116,16 +56,33 @@ async function createSidebar() {
   await waitForBody();
 
   const sidebar = document.createElement('div');
+  const conversationTitle = escapeHtml(getConversationTitle());
 
   sidebar.id = 'conversation-navigator-sidebar';
 
   sidebar.innerHTML = `
-  <h2>Conversation Navigator</h2>
-  <button id="refresh-toc-btn">Refresh TOC</button>
-	  <p class="navigator-hint">
-	    Waiting for conversation data...
-	  </p>
-	  <div id="navigator-list"></div>
+    <div id="navigator-resizer"></div>
+    <div class="navigator-topbar">
+      <div class="navigator-header">
+        <h2 id="navigator-title">${conversationTitle}</h2>
+        <button id="refresh-toc-btn" type="button" aria-label="Refresh TOC">
+          <span aria-hidden="true">⟳</span>
+        </button>
+      </div>
+
+      <p class="navigator-hint">
+        ${NAVIGATOR_EMPTY_HINT_TEXT}
+      </p>
+
+      <input
+        id="navigator-search"
+        type="search"
+        placeholder="Search prompts..."
+        autocomplete="off"
+      />
+    </div>
+
+    <div id="navigator-list"></div>
 	`;
 
   document.body.appendChild(sidebar);
@@ -133,7 +90,80 @@ async function createSidebar() {
     .getElementById('refresh-toc-btn')
     .addEventListener('click', reloadCurrentPageData);
 
+  document
+    .getElementById('navigator-search')
+    .addEventListener('input', (event) => {
+      navigatorSearchQuery = event.target.value;
+      buildNavigator();
+    });
+
   return sidebar;
+}
+
+function initSidebarResize(sidebar) {
+  const resizer = document.getElementById('navigator-resizer');
+
+  if (!resizer) return;
+
+  resizer.addEventListener('mousedown', (event) => {
+    event.preventDefault();
+
+    const startX = event.clientX;
+    const startWidth = sidebar.getBoundingClientRect().width;
+
+    function handleMouseMove(moveEvent) {
+      const delta = startX - moveEvent.clientX;
+      const nextWidth = Math.min(520, Math.max(240, startWidth + delta));
+
+      sidebar.style.setProperty('--navigator-width', `${nextWidth}px`);
+    }
+
+    function handleMouseUp() {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    }
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  });
+}
+
+function getConversationTitle() {
+  const match = location.pathname.match(/\/c\/([^/]+)/);
+  const conversationId = match?.[1];
+
+  if (conversationId) {
+    const conversationLink = document.querySelector(
+      `a[href*="/c/${conversationId}"]`
+    );
+
+    const sidebarTitle = conversationLink?.innerText?.trim();
+
+    if (sidebarTitle) {
+      return sidebarTitle;
+    }
+  }
+
+  return (
+    document.title
+      .replace(/\s*[-–]\s*ChatGPT$/i, '')
+      .replace(/^ChatGPT\s*[-–]\s*/i, '')
+      .trim() || 'ChatTOC'
+  );
+}
+
+function escapeHtml(text) {
+  return text.replace(/[&<>"']/g, (char) => {
+    const entities = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    };
+
+    return entities[char];
+  });
 }
 
 function reloadCurrentPageData() {
@@ -156,10 +186,14 @@ function createToggleButton(sidebar) {
   const toggleBtn = document.createElement('button');
 
   toggleBtn.id = 'toggle-sidebar-btn';
+  toggleBtn.className = 'sidebar-visible';
   toggleBtn.innerHTML = '☰';
 
   toggleBtn.addEventListener('click', () => {
-    sidebar.classList.toggle('navigator-hidden');
+    const isHidden = sidebar.classList.toggle('navigator-hidden');
+
+    toggleBtn.classList.toggle('sidebar-hidden', isHidden);
+    toggleBtn.classList.toggle('sidebar-visible', !isHidden);
   });
 
   document.body.appendChild(toggleBtn);
@@ -247,138 +281,243 @@ function buildNavigator() {
   if (!list) return;
 
   list.innerHTML = '';
+  navigatorItems = []; // Reset navigator items for new build
+
+  // Filter messages by search query
+  const normalizedQuery = normalizeText(navigatorSearchQuery).toLowerCase();
+
+  const visibleMessages = conversationMessages
+    .map((message, index) => ({ message, index }))
+    .filter(({ message }) => {
+      if (!normalizedQuery) return true;
+
+      return normalizeText(message.text)
+        .toLowerCase()
+        .includes(normalizedQuery);
+    });
 
   if (hint) {
-    hint.textContent = `${conversationMessages.length} user messages found.`;
+    const hasMessages = conversationMessages.length > 0;
+    const hasQuery = normalizedQuery.length > 0;
+
+    hint.hidden = hasMessages && (!hasQuery || visibleMessages.length > 0);
+
+    hint.textContent = hasQuery
+      ? 'No matching prompts.'
+      : NAVIGATOR_EMPTY_HINT_TEXT;
   }
 
-  // conversationMessages.forEach((message, index) => {
-  //   const fullText = message.text.replace(/\s+/g, ' ');
-
-  //   const item = document.createElement('div');
-
-  //   item.className = 'navigator-item';
-  //   item.textContent = `${index + 1}. ${fullText}`;
-
-  //   item.addEventListener('click', () => {
-  //     jumpToPromptByIndex(index);
-  //   });
-
-  //   item.addEventListener('mouseenter', (event) => {
-  //     showTooltip(message.text, event);
-  //   });
-
-  //   item.addEventListener('mouseleave', () => {
-  //     hideTooltip();
-  //   });
-
-  //   list.appendChild(item);
-  // });
-
-  conversationMessages.forEach((message, index) => {
+  // Build navigator items for visible messages
+  visibleMessages.forEach(({ message, index }) => {
     const fullText = message.text.replace(/\s+/g, ' ');
-    const shortTitle =
-      fullText.length > 40 ? `${fullText.slice(0, 40)}...` : fullText;
 
     const item = document.createElement('div');
 
+    item.dataset.messageIndex = String(index);
     item.className = 'navigator-item';
-    item.textContent = `${index + 1}. ${shortTitle}`;
-    item.title = fullText;
+    item.textContent = `${index + 1}. ${fullText}`;
 
-    // item.addEventListener('click', () => {
-    //   jumpToMessage(message.id);
-    // });
-    // item.addEventListener('click', () => {
-    //   jumpToPromptByIndex(index);
-    // });
+    navigatorItems[index] = item;
+
     item.addEventListener('click', () => {
-      jumpToUserMessageByText(message.text, index);
-    });
-
-    item.addEventListener('mouseenter', (event) => {
-      showTooltip(message.text, event);
-    });
-
-    item.addEventListener('mouseleave', () => {
       hideTooltip();
+      jumpToMessage(message, index);
     });
 
     list.appendChild(item);
+
+    if (isTextTruncated(item)) {
+      item.addEventListener('mouseenter', (event) => {
+        showTooltip(message.text, event);
+      });
+
+      item.addEventListener('mouseleave', () => {
+        hideTooltip();
+      });
+    }
   });
+
+  observeVisibleUserMessages(); // Re-observe messages after rebuilding the navigator
+}
+
+function isTextTruncated(element) {
+  return element.scrollWidth > element.clientWidth;
 }
 
 function normalizeText(text) {
   return text.replace(/\s+/g, ' ').trim();
 }
 
-function jumpToUserMessageByText(text, index) {
-  const targetText = normalizeText(text);
-
-  const userMessageElements = Array.from(
-    document.querySelectorAll('[data-message-author-role="user"]')
-  );
-
-  const matchedElement = userMessageElements.find((element) => {
-    const domText = normalizeText(element.innerText);
-
-    return domText.includes(targetText) || targetText.includes(domText);
+/**
+ * Set the navigator item at the given index as active, and remove active state from others.
+ * @param {number} index
+ */
+function setActiveNavigatorItem(index) {
+  navigatorItems.forEach((item) => {
+    item.classList.remove('navigator-item-active');
   });
 
-  if (matchedElement) {
-    matchedElement.scrollIntoView({
-      behavior: 'smooth',
-      block: 'center',
-    });
+  const item = navigatorItems[index];
 
-    matchedElement.style.outline = '2px solid #60a5fa';
-    matchedElement.style.borderRadius = '8px';
+  if (!item) return;
 
-    setTimeout(() => {
-      matchedElement.style.outline = '';
-      matchedElement.style.borderRadius = '';
-    }, 1200);
+  item.classList.add('navigator-item-active');
 
-    return;
-  }
-
-  console.log('[Navigator] Text match failed, fallback to prompt index:', {
-    index,
-    text,
-  });
-
-  jumpToPromptByIndex(index);
+  scrollNavigatorItemIntoView(item);
 }
 
+/**
+ * Scroll the given navigator item into view if it's not fully visible in the sidebar.
+ * @param {HTMLElement} item
+ */
+function scrollNavigatorItemIntoView(item) {
+  const scrollContainer = document.getElementById('navigator-list');
+
+  if (!scrollContainer) return;
+
+  const itemRect = item.getBoundingClientRect();
+  const containerRect = scrollContainer.getBoundingClientRect();
+
+  const topPadding = 56;
+  const bottomPadding = 80;
+
+  const isAbove = itemRect.top < containerRect.top + topPadding;
+  const isBelow = itemRect.bottom > containerRect.bottom - bottomPadding;
+
+  if (!isAbove && !isBelow) return;
+
+  const nextScrollTop = isAbove
+    ? scrollContainer.scrollTop + itemRect.top - containerRect.top - topPadding
+    : scrollContainer.scrollTop +
+      itemRect.bottom -
+      containerRect.bottom +
+      bottomPadding;
+
+  scrollContainer.scrollTo({
+    top: nextScrollTop,
+    behavior: 'smooth',
+  });
+}
+
+/**
+ * Find the index of the conversation message that matches the given DOM element, by comparing their text content.
+ * @param {HTMLElement} element
+ * @returns {number} The index of the conversation message that matches the given element, or -1 if not found.
+ */
+function findConversationIndexByElement(element) {
+  const domText = normalizeText(element.innerText);
+
+  return conversationMessages.findIndex((message) => {
+    const messageText = normalizeText(message.text);
+
+    return domText === messageText || domText.includes(messageText);
+  });
+}
+
+/**
+ * Observes user message elements in the page and updates the active navigator item based on which message is most visible in the viewport.
+ * Uses IntersectionObserver to efficiently track visibility changes.
+ */
+function observeVisibleUserMessages() {
+  if (activePromptObserver) {
+    activePromptObserver.disconnect();
+  }
+
+  activePromptObserver = new IntersectionObserver(
+    (entries) => {
+      const visibleEntries = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
+
+      const topEntry = visibleEntries[0];
+
+      if (!topEntry) return;
+
+      const index = findConversationIndexByElement(topEntry.target);
+
+      if (index === -1) return;
+
+      setActiveNavigatorItem(index);
+    },
+    {
+      threshold: [0.1, 0.25, 0.5, 0.75, 1],
+    }
+  );
+
+  document
+    .querySelectorAll('[data-message-author-role="user"]')
+    .forEach((element) => {
+      activePromptObserver.observe(element);
+    });
+}
+
+/**
+ * Init tracking of the active prompt in the viewport, and highlight the corresponding navigator item.
+ */
+function initActivePromptTracking() {
+  if (activePromptMutationObserver) {
+    activePromptMutationObserver.disconnect();
+  }
+
+  activePromptMutationObserver = new MutationObserver(() => {
+    clearTimeout(activePromptMutationTimer);
+
+    activePromptMutationTimer = setTimeout(() => {
+      observeVisibleUserMessages();
+    }, 200);
+  });
+
+  activePromptMutationObserver.observe(document.body, {
+    childList: true,
+    subtree: true,
+  });
+
+  observeVisibleUserMessages();
+}
+
+/**
+ * Shows a tooltip with the full message text when hovering over a truncated item.
+ * @param {string} text
+ * @param {MouseEvent} event
+ */
 function showTooltip(text, event) {
   const tooltip = document.getElementById('navigator-tooltip');
 
   if (!tooltip) return;
 
   clearTimeout(tooltipHideTimer);
+  clearTimeout(tooltipShowTimer);
+
   tooltipHideTimer = null;
+  tooltipShowTimer = null;
+  tooltip.classList.remove('visible');
 
-  tooltip.textContent = text;
-  tooltip.classList.add('visible');
+  const clientX = event.clientX;
+  const clientY = event.clientY;
 
-  const gap = 8;
-  const margin = 16;
-  const sidebar = document.getElementById('conversation-navigator-sidebar');
-  const sidebarRect = sidebar?.getBoundingClientRect();
+  tooltipShowTimer = setTimeout(() => {
+    tooltip.textContent = text;
+    tooltip.classList.add('visible');
 
-  let y = event.clientY + 15;
+    const gap = 8;
+    const margin = 16;
+    const scrollContainer = document.getElementById('navigator-list');
+    const containerRect = scrollContainer?.getBoundingClientRect();
 
-  const rect = tooltip.getBoundingClientRect();
-  const x = sidebarRect
-    ? Math.max(margin, sidebarRect.left - rect.width - gap)
-    : Math.max(margin, event.clientX - rect.width - gap);
+    let y = clientY + 15;
 
-  if (y + rect.height > window.innerHeight) {
-    y = window.innerHeight - rect.height - margin;
-  }
+    const rect = tooltip.getBoundingClientRect();
+    const x = containerRect
+      ? Math.max(margin, containerRect.left - rect.width - gap)
+      : Math.max(margin, clientX - rect.width - gap);
 
-  tooltip.style.left = `${x}px`;
-  tooltip.style.top = `${y}px`;
+    if (y + rect.height > window.innerHeight) {
+      y = window.innerHeight - rect.height - margin;
+    }
+
+    tooltip.style.left = `${x}px`;
+    tooltip.style.top = `${y}px`;
+  }, TOOLTIP_SHOW_DELAY_MS);
 }
 
 function hideTooltip() {
@@ -387,11 +526,14 @@ function hideTooltip() {
   if (!tooltip) return;
 
   clearTimeout(tooltipHideTimer);
+  clearTimeout(tooltipShowTimer);
+
+  tooltipShowTimer = null;
 
   tooltipHideTimer = setTimeout(() => {
     tooltip.classList.remove('visible');
     tooltipHideTimer = null;
-  }, 200);
+  }, TOOLTIP_HIDE_DELAY_MS);
 }
 
 function initTooltip() {
@@ -414,6 +556,12 @@ function initTooltip() {
 function handleConversationData(data) {
   if (!data || !data.mapping) {
     return;
+  }
+
+  const title = document.getElementById('navigator-title');
+
+  if (title) {
+    title.textContent = getConversationTitle();
   }
 
   conversationMessages = extractUserMessages(data);
@@ -449,44 +597,65 @@ function listenForConversationData() {
       );
 
       if (!exists) {
-        // conversationMessages.push(newMessage);
         const rawText =
           newMessage.text || newMessage.content?.parts?.join('\n') || '';
 
         const normalizedMessage = {
           id: newMessage.id,
           text: rawText.trim(),
-          createTime: newMessage.create_time ?? Date.now(),
+          createTime: newMessage.createTime ?? Date.now(),
         };
 
         conversationMessages.push(normalizedMessage);
         buildNavigator();
 
         console.log('❤️[Navigator] after:', conversationMessages.length);
-        buildNavigator();
       } else {
         console.log('❤️[Navigator] duplicate message ignored');
       }
     }
-    // ❤️ End Test
   });
 }
 
-// function jumpToPromptByIndex(index) {
-//   const buttons = Array.from(
-//     document.querySelectorAll('[aria-label^="Prompt"]')
-//   );
+/** Scrolls to the given element and applies a temporary highlight effect.
+ * @param {HTMLElement} element
+ */
+function scrollToMatchedElement(element) {
+  element.scrollIntoView({
+    behavior: 'smooth',
+    block: 'center',
+  });
 
-//   const button = buttons[index];
+  element.style.outline = '2px solid #60a5fa';
+  element.style.borderRadius = '8px';
 
-//   if (!button) {
-//     console.log('Prompt button not found:', index + 1);
-//     return;
-//   }
+  setTimeout(() => {
+    element.style.outline = '';
+    element.style.borderRadius = '';
+  }, 1200);
+}
 
-//   button.click();
-// }
+/**
+ * Jump to the user message element by matching its text content.
+ * @param {Object} message
+ * @param {number} index
+ */
+function jumpToMessage(message, index) {
+  if (jumpToPromptByIndex(index)) {
+    retryJumpToUserMessageByText(message.text);
+    return;
+  }
 
+  if (jumpToUserMessageByText(message.text)) return;
+
+  jumpToVisibleUserMessageByIndex(index);
+}
+
+/**
+ * Jumps to a prompt button by its index.
+ * @param {number} index
+ * @returns true if jump succeeded, false otherwise
+ */
 function jumpToPromptByIndex(index) {
   const buttons = Array.from(
     document.querySelectorAll('[aria-label^="Prompt"]')
@@ -494,15 +663,45 @@ function jumpToPromptByIndex(index) {
 
   const button = buttons[index];
 
-  if (button) {
-    button.click();
-    return;
+  if (!button) {
+    return false;
   }
 
-  jumpToUserMessageFallback(index);
+  button.click();
+  return true;
 }
 
-function jumpToUserMessageFallback(index) {
+/**
+ * Jumps to a user message by its text content.
+ * @param {string} text
+ * @returns {boolean} true if jump succeeded, false otherwise
+ */
+function jumpToUserMessageByText(text) {
+  const targetText = normalizeText(text);
+
+  const userMessageElements = Array.from(
+    document.querySelectorAll('[data-message-author-role="user"]')
+  );
+
+  const matchedElement = userMessageElements.find((element) => {
+    const domText = normalizeText(element.innerText);
+    return domText === targetText || domText.includes(targetText);
+  });
+
+  if (!matchedElement) {
+    return false;
+  }
+
+  scrollToMatchedElement(matchedElement);
+  return true;
+}
+
+/**
+ * Jumps to a visible user message by its index.
+ * @param {number} index
+ * @returns true if jump succeeded, false otherwise
+ */
+function jumpToVisibleUserMessageByIndex(index) {
   const messages = Array.from(
     document.querySelectorAll('[data-message-author-role="user"]')
   );
@@ -510,25 +709,38 @@ function jumpToUserMessageFallback(index) {
   const message = messages[index];
 
   if (!message) {
-    console.log('[Navigator] User message not found:', index + 1);
-    return;
+    console.log('[Navigator] Visible user message not found:', index + 1);
+    return false;
   }
 
-  message.scrollIntoView({
-    behavior: 'smooth',
-    block: 'start',
-  });
+  scrollToMatchedElement(message);
+  return true;
+}
+
+/**
+ * Retries jumping to a user message by text content, with a limited number of attempts.
+ * @param {string} text
+ * @param {number} attempts
+ */
+function retryJumpToUserMessageByText(text, attempts = 8) {
+  if (jumpToUserMessageByText(text)) return;
+
+  if (attempts <= 1) return;
+
+  setTimeout(() => {
+    retryJumpToUserMessageByText(text, attempts - 1);
+  }, 150);
 }
 
 async function main() {
   injectFetchHook(); // Start intercepting conversation data
-  // fetchCurrentConversation(); // Fetch current conversation data on load (in case we missed it in the hook)
-  // listenForUrlChanges(); // Listen for URL changes to detect conversation switches
 
   listenForConversationData(); // Listen for data sent from the fetch hook
 
   const sidebar = await createSidebar();
 
+  initSidebarResize(sidebar);
+  initActivePromptTracking();
   createToggleButton(sidebar);
 
   createTooltip();
