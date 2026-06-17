@@ -16,6 +16,7 @@ let activePromptMutationTimer = null;
 const NAVIGATOR_EMPTY_HINT_TEXT = 'Waiting for prompts...';
 const TOOLTIP_SHOW_DELAY_MS = 500;
 const TOOLTIP_HIDE_DELAY_MS = 200;
+const WIDTH_SPOOF_MESSAGE_TYPE = 'CHATGPT_NAVIGATOR_SET_WIDTH_SPOOF';
 
 /**
  * Injects pageHook.js into the real page context.
@@ -129,6 +130,10 @@ function initSidebarResize(sidebar) {
   });
 }
 
+/**
+ * Derives the visible conversation title from ChatGPT's sidebar when possible,
+ * then falls back to the document title.
+ */
 function getConversationTitle() {
   const match = location.pathname.match(/\/c\/([^/]+)/);
   const conversationId = match?.[1];
@@ -153,6 +158,10 @@ function getConversationTitle() {
   );
 }
 
+/**
+ * Returns the route key used to reset local state when ChatGPT SPA navigation
+ * switches between conversations without reloading the content script.
+ */
 function getCurrentConversationKey() {
   const match = location.pathname.match(/\/c\/([^/]+)/);
 
@@ -177,6 +186,22 @@ function reloadCurrentPageData() {
   location.reload();
 }
 
+/**
+ * Enables the page-context width spoof only while the ChatTOC sidebar is open.
+ */
+function setWideViewportSpoofEnabled(enabled) {
+  window.postMessage(
+    {
+      type: WIDTH_SPOOF_MESSAGE_TYPE,
+      enabled,
+    },
+    '*'
+  );
+}
+
+/**
+ * Clears all per-conversation UI state after an in-page route change.
+ */
 function resetNavigatorStateForCurrentRoute() {
   // ChatGPT is a SPA, so switching chats can keep this content script alive.
   // Clear per-conversation state when the route changes.
@@ -199,6 +224,10 @@ function resetNavigatorStateForCurrentRoute() {
   buildNavigator();
 }
 
+/**
+ * Detects ChatGPT route changes and resets the navigator when the active
+ * conversation changes.
+ */
 function syncNavigatorRouteState() {
   const nextConversationKey = getCurrentConversationKey();
 
@@ -215,6 +244,10 @@ function syncNavigatorRouteState() {
   resetNavigatorStateForCurrentRoute();
 }
 
+/**
+ * Polls for SPA route changes because ChatGPT does not always trigger a full
+ * page load or a reliable browser navigation event.
+ */
 function listenForRouteChanges() {
   currentConversationKey = getCurrentConversationKey();
 
@@ -246,13 +279,16 @@ function createToggleButton(sidebar) {
 
     toggleBtn.classList.toggle('sidebar-hidden', isHidden);
     toggleBtn.classList.toggle('sidebar-visible', !isHidden);
+    setWideViewportSpoofEnabled(!isHidden);
   });
 
   document.body.appendChild(toggleBtn);
 }
 
 /**
- * Converts mixed message parts into simple TOC text labels.
+ * Converts ChatGPT message content and attachments into simple TOC text labels.
+ * Non-text parts are kept as readable placeholders so image/file prompts still
+ * appear in the navigator.
  */
 function getMessageDisplayText(message) {
   const content = message.content;
@@ -284,6 +320,11 @@ function getMessageDisplayText(message) {
   return [...attachmentParts, ...textParts].join('\n').trim();
 }
 
+/**
+ * Walks the current conversation branch from current_node back to the root.
+ * ChatGPT's mapping can contain alternate branches, so this avoids listing
+ * prompts outside the active branch.
+ */
 function getOrderedConversationNodes(data) {
   const mapping = data.mapping;
   const orderedNodes = [];
@@ -303,6 +344,9 @@ function getOrderedConversationNodes(data) {
   return orderedNodes.reverse();
 }
 
+/**
+ * Extracts user prompts from ChatGPT's conversation payload in display order.
+ */
 function extractUserMessages(data) {
   if (!data || !data.mapping) {
     console.warn('Invalid conversation data received');
@@ -606,7 +650,8 @@ function initTooltip() {
 }
 
 /**
- * Handles conversation data sent from pageHook.js.
+ * Handles the full conversation payload captured by pageHook.js and rebuilds
+ * the navigator from the active conversation branch.
  */
 function handleConversationData(data) {
   if (!data || !data.mapping) {
@@ -627,7 +672,9 @@ function handleConversationData(data) {
 }
 
 /**
- * Listens for messages sent from pageHook.js.
+ * Listens for pageHook.js messages from the page context. Full conversation
+ * payloads rebuild the TOC; streamed input_message events append the latest
+ * prompt before ChatGPT performs a full conversation refetch.
  */
 function listenForConversationData() {
   window.addEventListener('message', (event) => {
@@ -692,7 +739,9 @@ function scrollToMatchedElement(element) {
 }
 
 /**
- * Jump to the user message element by matching its text content.
+ * Jumps to a prompt. Prefer ChatGPT's built-in prompt navigator because it can
+ * scroll virtualized conversations; DOM text/index fallbacks only work for
+ * messages currently rendered in the page.
  * @param {Object} message
  * @param {number} index
  */
@@ -708,13 +757,22 @@ function jumpToMessage(message, index) {
 }
 
 /**
- * Jumps to a prompt button by its index.
+ * Clicks ChatGPT's built-in prompt navigator item. This depends on ChatGPT's
+ * current aria-label convention and is why pageHook.js keeps that navigator
+ * mounted in split-view layouts.
  * @param {number} index
  * @returns true if jump succeeded, false otherwise
  */
 function jumpToPromptByIndex(index) {
   const buttons = Array.from(
-    document.querySelectorAll('[aria-label^="Prompt"]')
+    document.querySelectorAll(
+      [
+        '[aria-label^="Prompt"]',
+        '[aria-label^="prompt"]',
+        '[aria-description^="Prompt"]',
+        '[aria-description^="prompt"]',
+      ].join(',')
+    )
   );
 
   const button = buttons[index];
@@ -728,7 +786,8 @@ function jumpToPromptByIndex(index) {
 }
 
 /**
- * Jumps to a user message by its text content.
+ * Fallback for already-rendered messages: find a user message whose DOM text
+ * matches the captured prompt text.
  * @param {string} text
  * @returns {boolean} true if jump succeeded, false otherwise
  */
@@ -753,7 +812,8 @@ function jumpToUserMessageByText(text) {
 }
 
 /**
- * Jumps to a visible user message by its index.
+ * Last-resort fallback for non-virtualized pages where all user messages are
+ * present in the DOM.
  * @param {number} index
  * @returns true if jump succeeded, false otherwise
  */
