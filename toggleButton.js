@@ -2,8 +2,8 @@
  * Builds and manages the floating ChatTOC sidebar toggle button.
  */
 (function () {
-  const POSITION_STORAGE_KEY = 'chatToc:toggleButtonPosition';
   const WIDTH_SPOOF_MESSAGE_TYPE = 'CHATGPT_NAVIGATOR_SET_WIDTH_SPOOF';
+  const POSITION_MARGIN = 8;
 
   /**
    * Creates the floating toggle button.
@@ -16,18 +16,12 @@
     toggleBtn.className = 'sidebar-visible';
     toggleBtn.innerHTML = `
       <svg aria-hidden="true" viewBox="0 0 64 64">
-        <defs>
-          <mask id="chat-toc-moon-mask">
-            <rect width="64" height="64" fill="black" />
-            <circle cx="32" cy="32" r="24" fill="white" />
-            <circle cx="23" cy="22" r="25" fill="black" />
-          </mask>
-        </defs>
-        <rect width="64" height="64" fill="currentColor" mask="url(#chat-toc-moon-mask)" />
+        <path
+          fill="currentColor"
+          d="M48 8A26 26 0 1 1 15 48C29 52 43 43 49 29C52 21 51 13 48 8Z"
+        />
       </svg>
     `;
-
-    initDrag(toggleBtn);
 
     toggleBtn.addEventListener('click', (event) => {
       if (toggleBtn.dataset.dragged === 'true') {
@@ -44,18 +38,17 @@
     });
 
     document.body.appendChild(toggleBtn);
+    initDrag(toggleBtn);
   }
 
   /**
-   * Enables pointer dragging and persists the final button position.
+   * Enables pointer dragging for the current page session.
    * @param {HTMLButtonElement} toggleBtn
    */
   function initDrag(toggleBtn) {
-    const savedPosition = loadPosition();
-
-    if (savedPosition) {
-      setPosition(toggleBtn, savedPosition.left, savedPosition.top);
-    }
+    window.addEventListener('resize', () => {
+      keepButtonInViewport(toggleBtn);
+    });
 
     toggleBtn.addEventListener('pointerdown', (event) => {
       if (event.button !== 0) return;
@@ -100,10 +93,6 @@
         if (!didDrag) return;
 
         toggleBtn.dataset.dragged = 'true';
-        savePosition({
-          left: toggleBtn.offsetLeft,
-          top: toggleBtn.offsetTop,
-        });
       }
 
       toggleBtn.addEventListener('pointermove', handlePointerMove);
@@ -126,6 +115,26 @@
   }
 
   /**
+   * Re-clamps the current session position after viewport size changes.
+   * @param {HTMLButtonElement} toggleBtn
+   */
+  function keepButtonInViewport(toggleBtn) {
+    const rect = toggleBtn.getBoundingClientRect();
+    const nextPosition = clampPosition(
+      rect.left,
+      rect.top,
+      rect.width,
+      rect.height
+    );
+
+    if (nextPosition.left === rect.left && nextPosition.top === rect.top) {
+      return;
+    }
+
+    setPosition(toggleBtn, nextPosition.left, nextPosition.top);
+  }
+
+  /**
    * Keeps the button fully inside the viewport.
    * @param {number} left
    * @param {number} top
@@ -134,50 +143,19 @@
    * @returns {{ left: number, top: number }}
    */
   function clampPosition(left, top, width, height) {
-    const margin = 8;
+    const maxLeft = Math.max(
+      POSITION_MARGIN,
+      window.innerWidth - width - POSITION_MARGIN
+    );
+    const maxTop = Math.max(
+      POSITION_MARGIN,
+      window.innerHeight - height - POSITION_MARGIN
+    );
 
     return {
-      left: Math.min(
-        window.innerWidth - width - margin,
-        Math.max(margin, left)
-      ),
-      top: Math.min(
-        window.innerHeight - height - margin,
-        Math.max(margin, top)
-      ),
+      left: Math.min(maxLeft, Math.max(POSITION_MARGIN, left)),
+      top: Math.min(maxTop, Math.max(POSITION_MARGIN, top)),
     };
-  }
-
-  /**
-   * Loads and validates the saved button position.
-   * @returns {{ left: number, top: number } | null}
-   */
-  function loadPosition() {
-    try {
-      const rawValue = localStorage.getItem(POSITION_STORAGE_KEY);
-      const parsedValue = rawValue ? JSON.parse(rawValue) : null;
-
-      if (
-        typeof parsedValue?.left !== 'number' ||
-        typeof parsedValue?.top !== 'number'
-      ) {
-        return null;
-      }
-
-      return clampPosition(parsedValue.left, parsedValue.top, 42, 42);
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * Persists the button position.
-   * @param {{ left: number, top: number }} position
-   */
-  function savePosition(position) {
-    try {
-      localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(position));
-    } catch {}
   }
 
   /**
