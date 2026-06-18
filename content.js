@@ -6,6 +6,8 @@
 let conversationMessages = [];
 let navigatorSearchQuery = ''; // filter navigator items by this query, set by the search input in the sidebar
 let currentConversationKey = null;
+let pendingNewChatRouteKey = null;
+let pendingNewChatMessage = null;
 let activeNavigatorIndex = null;
 
 /* Use to highlight current prompt*/
@@ -249,6 +251,61 @@ function getCurrentConversationKey() {
 }
 
 /**
+ * Returns whether a route key belongs to ChatGPT's pre-conversation new-chat
+ * route.
+ * @param {string} routeKey
+ * @returns {boolean}
+ */
+function isNewChatRouteKey(routeKey) {
+  return routeKey.startsWith('new-chat:');
+}
+
+/**
+ * Clears new-chat creation state once a real conversation payload arrives or
+ * the user navigates somewhere unrelated.
+ */
+function clearPendingNewChat() {
+  pendingNewChatRouteKey = null;
+  pendingNewChatMessage = null;
+}
+
+/**
+ * Appends one streamed user message if it is not already represented.
+ * @param {Object} newMessage
+ * @returns {boolean} Whether the message was added.
+ */
+function appendNavigatorMessage(newMessage) {
+  const exists = conversationMessages.some(
+    (message) => message.id === newMessage.id
+  );
+
+  if (exists) return false;
+
+  const normalizedMessage =
+    window.ChatTocMessages.createNavigatorMessage(newMessage);
+
+  conversationMessages.push(normalizedMessage);
+  return true;
+}
+
+/**
+ * Moves a new-chat message captured before route creation into the new
+ * conversation after ChatGPT navigates to /c/<id>.
+ */
+function flushPendingNewChatMessage() {
+  if (!pendingNewChatMessage) return;
+
+  const didAppend = appendNavigatorMessage(pendingNewChatMessage);
+  clearPendingNewChat();
+
+  if (didAppend) {
+    buildNavigator({
+      refreshObservers: true,
+    });
+  }
+}
+
+/**
  * Escapes text inserted into sidebar HTML templates.
  * @param {string} text
  * @returns {string}
@@ -320,8 +377,19 @@ function syncNavigatorRouteState() {
     return;
   }
 
+  const isNewChatCreationRoute =
+    isNewChatRouteKey(currentConversationKey) &&
+    !isNewChatRouteKey(nextConversationKey);
+
+  if (isNewChatCreationRoute) {
+    pendingNewChatRouteKey = currentConversationKey;
+  } else {
+    clearPendingNewChat();
+  }
+
   currentConversationKey = nextConversationKey;
   resetNavigatorStateForCurrentRoute();
+  flushPendingNewChatMessage();
 }
 
 /**
@@ -783,29 +851,34 @@ function listenForConversationData() {
 
     syncNavigatorRouteState();
 
-    if (
-      event.data?.routeKey &&
-      event.data.routeKey !== getCurrentConversationKey()
-    ) {
-      return;
-    }
-
     if (event.data?.type === 'CHATGPT_CONVERSATION_DATA') {
+      const routeKey = event.data.routeKey;
+
+      if (routeKey && routeKey !== getCurrentConversationKey()) return;
+
+      clearPendingNewChat();
       handleConversationData(event.data.payload);
     }
 
     if (event.data?.type === 'CHATGPT_NEW_USER_MESSAGE') {
+      const routeKey = event.data.routeKey;
+      const isCurrentRoute =
+        !routeKey || routeKey === getCurrentConversationKey();
+      const isMigratingNewChatMessage =
+        routeKey && routeKey === pendingNewChatRouteKey;
+
+      if (!isCurrentRoute && !isMigratingNewChatMessage) return;
+
       const newMessage = event.data.payload;
+      const didAppend = appendNavigatorMessage(newMessage);
 
-      const exists = conversationMessages.some(
-        (message) => message.id === newMessage.id
-      );
+      if (isMigratingNewChatMessage) {
+        clearPendingNewChat();
+      } else if (routeKey && isNewChatRouteKey(routeKey)) {
+        pendingNewChatMessage = newMessage;
+      }
 
-      if (!exists) {
-        const normalizedMessage =
-          window.ChatTocMessages.createNavigatorMessage(newMessage);
-
-        conversationMessages.push(normalizedMessage);
+      if (didAppend) {
         buildNavigator({
           refreshObservers: true,
         });
