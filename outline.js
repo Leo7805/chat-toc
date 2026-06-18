@@ -139,6 +139,14 @@
   }
 
   /**
+   * Collapses every expanded outline without clearing cached heading data.
+   */
+  function collapseAll() {
+    expandedPromptOutlines.clear();
+    updateAllPromptItems();
+  }
+
+  /**
    * Reapplies expanded-outline rules after pinned state changes.
    */
   function syncPinnedState() {
@@ -610,6 +618,7 @@
     createPromptItem,
     getPromptOutline,
     handlePromptNavigation,
+    collapseAll,
     reset,
     resetPromptItems,
     scheduleBuild,

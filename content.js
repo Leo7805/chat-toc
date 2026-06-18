@@ -85,7 +85,9 @@ async function createSidebar() {
     <div id="navigator-resizer"></div>
     <div class="navigator-topbar">
       <div class="navigator-header">
-        <h2 id="navigator-title">${conversationTitle}</h2>
+        <button id="navigator-title" type="button" aria-label="Reset TOC view">
+          ${conversationTitle}
+        </button>
         <button class="navigator-icon-btn" id="refresh-toc-btn" type="button" aria-label="Refresh TOC">
           <span aria-hidden="true">⟳</span>
         </button>
@@ -126,6 +128,9 @@ async function createSidebar() {
   document
     .getElementById('refresh-toc-btn')
     .addEventListener('click', reloadCurrentPageData);
+  document
+    .getElementById('navigator-title')
+    .addEventListener('click', resetNavigatorView);
   document
     .getElementById('jump-chat-top-btn')
     .addEventListener('click', () =>
@@ -329,6 +334,32 @@ function escapeHtml(text) {
  */
 function reloadCurrentPageData() {
   location.reload();
+}
+
+/**
+ * Restores the sidebar list to its default browsing state without changing the
+ * active ChatGPT scroll position.
+ */
+function resetNavigatorView() {
+  navigatorSearchQuery = '';
+  window.ChatTocTooltip.hide();
+  window.ChatTocOutline?.collapseAll?.();
+
+  const search = document.getElementById('navigator-search');
+  const list = document.getElementById('navigator-list');
+
+  if (search) {
+    search.value = '';
+  }
+
+  buildNavigator({
+    refreshObservers: true,
+  });
+
+  list?.scrollTo({
+    top: 0,
+    behavior: 'smooth',
+  });
 }
 
 /**
