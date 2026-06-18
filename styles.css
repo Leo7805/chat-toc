@@ -15,8 +15,8 @@
   min-width: 240px;
   max-width: 520px;
   height: 100vh;
-  background: #111827;
-  color: white;
+  background: rgba(17, 24, 39, 0.9);
+  color: #dbe4f0;
   z-index: 999999;
   padding: 12px;
   box-sizing: border-box;
@@ -56,6 +56,7 @@
   text-align: center;
   font-size: 15px;
   line-height: 1.3;
+  color: #eef2f7;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -80,7 +81,7 @@
   border: none;
   border-radius: 50%;
   background: transparent;
-  color: white;
+  color: #e5edf7;
   font-size: 24px;
   line-height: 1;
   cursor: pointer;
@@ -91,9 +92,19 @@
 }
 
 .navigator-action-rail .navigator-icon-btn {
-  background: rgba(17, 24, 39, 0.2);
+  background: rgba(17, 24, 39, 0.1);
+  color: rgba(255, 255, 255, 0.62);
   justify-self: auto;
   transform: none;
+}
+
+.navigator-action-rail .navigator-icon-btn:hover {
+  background: rgba(55, 65, 81, 0.28);
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.navigator-action-rail .navigator-icon-btn:active {
+  background: rgba(75, 85, 99, 0.36);
 }
 
 .navigator-icon-btn:hover {
@@ -190,25 +201,65 @@
 }
 
 .navigator-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 22px;
-  align-items: center;
-  gap: 6px;
+  box-sizing: border-box;
+  width: 100%;
   padding: 8px;
   margin-top: 6px;
   border-radius: 6px;
   cursor: pointer;
+  color: #d7e0ec;
   line-height: 1.4;
+  overflow: hidden;
+}
+
+.navigator-item-main {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .navigator-item-text {
+  display: block;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 100%;
+  line-height: 22px;
   text-overflow: ellipsis;
   white-space: nowrap;
   overflow: hidden;
 }
 
+.navigator-outline-indicator {
+  flex: 0 0 14px;
+  color: #93c5fd;
+  line-height: 1;
+  width: 14px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+}
+
+.navigator-outline-indicator svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  transition: transform 120ms ease;
+}
+
+.navigator-outline-indicator[data-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+
 .navigator-item:hover {
-  background: #374151;
+  background: rgba(55, 65, 81, 0.64);
 }
 
 .navigator-item.navigator-item-pinned {
@@ -222,9 +273,52 @@
   color: white;
 }
 
+.navigator-item.navigator-item-active.navigator-item-outline-expanded {
+  box-shadow:
+    inset 0 0 0 1px #60a5fa,
+    inset 3px 0 0 #60a5fa;
+}
+
+.navigator-outline-list {
+  margin-top: 6px;
+}
+
+.navigator-outline-item {
+  margin-top: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 3px 6px 3px 12px;
+  color: #cbd5e1;
+  font-size: 12px;
+  line-height: 1.35;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.navigator-outline-item[data-level='2'] {
+  padding-left: 22px;
+  color: #94a3b8;
+}
+
+.navigator-outline-item:hover {
+  background: rgba(96, 165, 250, 0.16);
+  color: #eff6ff;
+}
+
+.chat-toc-outline-heading-highlight {
+  background: rgba(245, 158, 11, 0.18);
+  border-radius: 6px;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.16);
+  transition:
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
 .navigator-pin-btn {
-  width: 22px;
-  height: 22px;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -251,8 +345,8 @@
 }
 
 .navigator-pin-btn svg {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;

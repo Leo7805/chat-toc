@@ -21,7 +21,16 @@
   "content_scripts": [
     {
       "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
-      "js": ["content.js"],
+      "js": [
+        "outline.js",
+        "follow.js",
+        "message.js",
+        "pin.js",
+        "jump.js",
+        "tooltip.js",
+        "toggleButton.js",
+        "content.js"
+      ],
       "css": ["styles.css"],
       "run_at": "document_start"
     }

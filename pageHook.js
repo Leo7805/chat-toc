@@ -1,3 +1,8 @@
+/**
+ * Injected page-context hook. It captures ChatGPT conversation fetch payloads,
+ * streams newly submitted user prompts, and spoofs width media queries while
+ * the ChatTOC sidebar is visible.
+ */
 (() => {
   const HOOK_FLAG = '__conversationNavigatorFetchHookInstalled';
   const MESSAGE_TYPE = 'CHATGPT_CONVERSATION_DATA';
@@ -21,7 +26,6 @@
   }
 
   window[HOOK_FLAG] = true;
-  console.log('✅ [Navigator] hook installed');
 
   installWideViewportMatchMediaSpoof();
   listenForWidthSpoofToggle();
@@ -29,49 +33,58 @@
   const originalFetch = window.fetch.bind(window);
 
   window.fetch = async function (...args) {
+    const requestMeta = getRequestMeta(args);
     const response = await originalFetch(...args);
 
+    try {
+      if (requestMeta?.isConversationGet) {
+        postConversationData(response, requestMeta.routeKey);
+      }
+
+      if (requestMeta?.isSendMessage) {
+        streamBuffer = '';
+        inspectStream(response, requestMeta.routeKey).catch(() => {});
+      }
+    } catch {}
+
+    return response;
+  };
+
+  /**
+   * Captures request metadata before the page fetch resolves so routeKey belongs
+   * to the route that initiated the request.
+   * @param {unknown[]} args Original fetch arguments.
+   * @returns {{ isConversationGet: boolean, isSendMessage: boolean, routeKey: string } | null}
+   */
+  function getRequestMeta(args) {
     try {
       const input = args[0];
       const init = args[1] || {};
       const url = getFetchUrl(input);
 
       if (!url) {
-        return response;
+        return null;
       }
 
       const method = getFetchMethod(input, init);
       const pathname = new URL(url, window.location.origin).pathname;
 
-      const isConversationGet =
-        method === 'GET' && pathname.startsWith(CONVERSATION_API_PATH);
-
-      const isSendMessage = method === 'POST' && pathname === SEND_MESSAGE_PATH;
-
-      if (isConversationGet) {
-        console.log('✅ [Navigator] fetch:', url);
-
-        postConversationData(response);
-      }
-
-      if (isSendMessage) {
-        console.log('✅ [Navigator] fetch:', url);
-
-        streamBuffer = '';
-        inspectStream(response).catch((error) => {
-          console.warn('[Navigator] stream inspect failed:', error);
-        });
-      }
-    } catch (error) {
-      console.warn('[Navigator] fetch hook error:', error);
+      return {
+        isConversationGet:
+          method === 'GET' && pathname.startsWith(CONVERSATION_API_PATH),
+        isSendMessage: method === 'POST' && pathname === SEND_MESSAGE_PATH,
+        routeKey: getCurrentConversationKey(),
+      };
+    } catch {
+      return null;
     }
-
-    return response;
-  };
+  }
 
   /**
    * Normalizes fetch input into a URL string so Request objects and string
    * URLs are handled the same way.
+   * @param {RequestInfo | URL} input
+   * @returns {string}
    */
   function getFetchUrl(input) {
     if (typeof input === 'string') {
@@ -87,11 +100,24 @@
 
   /**
    * Resolves the effective fetch method from Request and init arguments.
+   * @param {RequestInfo | URL} input
+   * @param {RequestInit} init
+   * @returns {string}
    */
   function getFetchMethod(input, init) {
     return (
       init.method || (input instanceof Request ? input.method : 'GET')
     ).toUpperCase();
+  }
+
+  /**
+   * Returns the ChatGPT route key at the time a request is intercepted.
+   * @returns {string}
+   */
+  function getCurrentConversationKey() {
+    const match = location.pathname.match(/\/c\/([^/]+)/);
+
+    return match?.[1] || `new-chat:${location.pathname}`;
   }
 
   /**
@@ -115,10 +141,6 @@
 
       return createSpoofedMediaQueryList(mediaQueryList, query);
     };
-
-    console.log(
-      `[Navigator] matchMedia width spoof enabled: ${SPOOFED_VIEWPORT_WIDTH}px`
-    );
   }
 
   /**
@@ -133,12 +155,6 @@
       wideViewportSpoofEnabled = Boolean(event.data.enabled);
       notifySpoofedMediaQueryListeners();
       window.dispatchEvent(new Event('resize'));
-
-      console.log(
-        `[Navigator] matchMedia width spoof ${
-          wideViewportSpoofEnabled ? 'enabled' : 'disabled'
-        }`
-      );
     });
   }
 
@@ -334,9 +350,7 @@
       listeners.forEach((listener) => {
         try {
           callMediaQueryListener(listener, entry.mediaQueryList, event);
-        } catch (error) {
-          console.warn('[Navigator] media query listener failed:', error);
-        }
+        } catch {}
       });
     });
   }
@@ -409,8 +423,10 @@
   /**
    * Clones ChatGPT's conversation GET response and sends the parsed payload to
    * the content script without consuming the page's original response body.
+   * @param {Response} response
+   * @param {string} routeKey Route key captured when the request was made.
    */
-  function postConversationData(response) {
+  function postConversationData(response, routeKey) {
     response
       .clone()
       .json()
@@ -418,6 +434,7 @@
         window.postMessage(
           {
             type: MESSAGE_TYPE,
+            routeKey,
             payload: data,
           },
           '*'
@@ -429,8 +446,11 @@
   /**
    * Reads a cloned send-message SSE stream so newly submitted user prompts can
    * appear in the navigator before the next full conversation fetch completes.
+   * @param {Response} response
+   * @param {string} routeKey Route key captured when the request was made.
+   * @returns {Promise<void>}
    */
-  async function inspectStream(response) {
+  async function inspectStream(response, routeKey) {
     const reader = response.clone().body?.getReader();
 
     if (!reader) return;
@@ -442,7 +462,7 @@
 
       if (done) {
         if (streamBuffer.trim()) {
-          processStreamLine(streamBuffer);
+          processStreamLine(streamBuffer, routeKey);
           streamBuffer = '';
         }
 
@@ -453,7 +473,7 @@
         stream: true,
       });
 
-      processBufferedStream();
+      processBufferedStream(routeKey);
     }
   }
 
@@ -461,22 +481,24 @@
    * Splits the accumulated SSE buffer into complete lines while keeping the
    * trailing partial line for the next stream chunk.
    */
-  function processBufferedStream() {
+  function processBufferedStream(routeKey) {
     const lines = streamBuffer.split('\n');
 
     // The last line may be incomplete.
     streamBuffer = lines.pop() || '';
 
     for (const line of lines) {
-      processStreamLine(line);
+      processStreamLine(line, routeKey);
     }
   }
 
   /**
    * Parses one SSE data line and forwards ChatGPT input_message events to the
    * content script.
+   * @param {string} line
+   * @param {string} routeKey Route key captured when the request was made.
    */
-  function processStreamLine(line) {
+  function processStreamLine(line, routeKey) {
     if (!line.startsWith('data: ')) {
       return;
     }
@@ -496,6 +518,7 @@
         window.postMessage(
           {
             type: 'CHATGPT_NEW_USER_MESSAGE',
+            routeKey,
             payload: {
               id: message.id,
               content: message.content,
@@ -506,10 +529,6 @@
           '*'
         );
       }
-    } catch (error) {
-      console.warn('[Navigator] Stream parse failed:', error);
-    }
+    } catch {}
   }
-
-  console.log('Conversation fetch hook installed');
 })();

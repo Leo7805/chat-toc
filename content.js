@@ -1,12 +1,12 @@
-console.log('ChatGPT Conversation Navigator loaded');
-
-// const collectedMessages = new Map();
+/**
+ * Main ChatTOC content script. It builds the sidebar UI, listens for captured
+ * ChatGPT conversation data, and coordinates the helper modules loaded before
+ * this file by manifest.json.
+ */
 let conversationMessages = [];
-let pinnedPromptIds = new Set();
-let tooltipHideTimer = null; // Hide tooltip with a delay to allow mouseenter on the tooltip itself when moving from the item to the tooltip
-let tooltipShowTimer = null; // show tooltip with a delay to avoid flickering when quickly moving mouse in and out of the item
 let navigatorSearchQuery = ''; // filter navigator items by this query, set by the search input in the sidebar
 let currentConversationKey = null;
+let activeNavigatorIndex = null;
 
 /* Use to highlight current prompt*/
 let navigatorItems = [];
@@ -17,15 +17,8 @@ let activeNativeTocObserver = null;
 let activeNativeTocTimer = null;
 let lockedNavigatorIndex = null;
 let lockedNavigatorTimer = null;
-let lastNonTextHighlightIndex = null;
-let lastNonTextHighlightElement = null;
 
 const NAVIGATOR_EMPTY_HINT_TEXT = 'Waiting for prompts...';
-const TOOLTIP_SHOW_DELAY_MS = 500;
-const TOOLTIP_HIDE_DELAY_MS = 200;
-const WIDTH_SPOOF_MESSAGE_TYPE = 'CHATGPT_NAVIGATOR_SET_WIDTH_SPOOF';
-const PINNED_PROMPTS_STORAGE_PREFIX = 'chatToc:pinned:';
-const TOGGLE_BUTTON_POSITION_STORAGE_KEY = 'chatToc:toggleButtonPosition';
 const NATIVE_PROMPT_BUTTON_SELECTORS = [
   'button[aria-label^="Prompt "]',
   'button[aria-label^="prompt "]',
@@ -33,9 +26,9 @@ const NATIVE_PROMPT_BUTTON_SELECTORS = [
   'button[aria-description^="prompt "]',
 ];
 const NATIVE_PROMPT_BUTTON_SELECTOR = NATIVE_PROMPT_BUTTON_SELECTORS.join(',');
-const ACTIVE_NATIVE_PROMPT_BUTTON_SELECTOR = NATIVE_PROMPT_BUTTON_SELECTORS
-  .map((selector) => `${selector}[data-toc-active]`)
-  .join(',');
+const ACTIVE_NATIVE_PROMPT_BUTTON_SELECTOR = NATIVE_PROMPT_BUTTON_SELECTORS.map(
+  (selector) => `${selector}[data-toc-active]`
+).join(',');
 
 /**
  * Injects pageHook.js into the real page context.
@@ -54,6 +47,11 @@ function injectFetchHook() {
   document.documentElement.appendChild(script);
 }
 
+/**
+ * Resolves once document.body exists. The content script runs at
+ * document_start, so body may not be available immediately.
+ * @returns {Promise<HTMLElement>}
+ */
 function waitForBody() {
   return new Promise((resolve) => {
     if (document.body) {
@@ -120,15 +118,22 @@ async function createSidebar() {
 	`;
 
   document.body.appendChild(sidebar);
+  initNavigatorFollow();
+  initNavigatorJump();
+
   document
     .getElementById('refresh-toc-btn')
     .addEventListener('click', reloadCurrentPageData);
   document
     .getElementById('jump-chat-top-btn')
-    .addEventListener('click', () => jumpToConversationEdge('top'));
+    .addEventListener('click', () =>
+      window.ChatTocJump.jumpToConversationEdge('top')
+    );
   document
     .getElementById('jump-chat-bottom-btn')
-    .addEventListener('click', () => jumpToConversationEdge('bottom'));
+    .addEventListener('click', () =>
+      window.ChatTocJump.jumpToConversationEdge('bottom')
+    );
 
   document
     .getElementById('navigator-search')
@@ -140,6 +145,43 @@ async function createSidebar() {
   return sidebar;
 }
 
+/**
+ * Wires the sidebar-follow state machine to native ChatGPT active prompt APIs.
+ */
+function initNavigatorFollow() {
+  window.ChatTocFollow.init({
+    listSelector: '#navigator-list',
+    ignoredScrollSelector:
+      '#conversation-navigator-sidebar, #navigator-tooltip',
+    getNativeActiveIndex: findActiveNativePromptIndex,
+    setActiveIndex: setActiveNavigatorItem,
+  });
+}
+
+/**
+ * Wires prompt jump behavior to native ChatGPT prompt buttons and active locks.
+ */
+function initNavigatorJump() {
+  window.ChatTocJump.init({
+    getNativePromptButtons,
+    normalizeText,
+    lockActiveIndex: lockActiveNavigatorItem,
+  });
+}
+
+/**
+ * Loads pin state for the current ChatGPT route.
+ */
+function initPinnedPrompts() {
+  window.ChatTocPin.init({
+    conversationKey: getCurrentConversationKey(),
+  });
+}
+
+/**
+ * Enables drag resizing for the sidebar.
+ * @param {HTMLElement} sidebar
+ */
 function initSidebarResize(sidebar) {
   const resizer = document.getElementById('navigator-resizer');
 
@@ -206,6 +248,11 @@ function getCurrentConversationKey() {
   return match?.[1] || `new-chat:${location.pathname}`;
 }
 
+/**
+ * Escapes text inserted into sidebar HTML templates.
+ * @param {string} text
+ * @returns {string}
+ */
 function escapeHtml(text) {
   return text.replace(/[&<>"']/g, (char) => {
     const entities = {
@@ -220,77 +267,11 @@ function escapeHtml(text) {
   });
 }
 
+/**
+ * Reloads the page so ChatGPT and ChatTOC both rebuild from fresh state.
+ */
 function reloadCurrentPageData() {
   location.reload();
-}
-
-function getPinnedPromptsStorageKey() {
-  return `${PINNED_PROMPTS_STORAGE_PREFIX}${getCurrentConversationKey()}`;
-}
-
-function loadPinnedPromptIds() {
-  try {
-    const rawValue = localStorage.getItem(getPinnedPromptsStorageKey());
-    const parsedValue = rawValue ? JSON.parse(rawValue) : [];
-
-    return new Set(Array.isArray(parsedValue) ? parsedValue : []);
-  } catch {
-    return new Set();
-  }
-}
-
-function savePinnedPromptIds() {
-  try {
-    localStorage.setItem(
-      getPinnedPromptsStorageKey(),
-      JSON.stringify([...pinnedPromptIds])
-    );
-  } catch {}
-}
-
-function togglePinnedPrompt(messageId) {
-  if (!messageId) return false;
-
-  if (pinnedPromptIds.has(messageId)) {
-    pinnedPromptIds.delete(messageId);
-  } else {
-    pinnedPromptIds.add(messageId);
-  }
-
-  savePinnedPromptIds();
-  return pinnedPromptIds.has(messageId);
-}
-
-/**
- * Jumps to the first or last prompt using ChatGPT's native TOC when available.
- * @param {'top' | 'bottom'} edge
- */
-function jumpToConversationEdge(edge) {
-  const buttons = getNativePromptButtons();
-  const button = edge === 'top' ? buttons[0] : buttons.at(-1);
-
-  if (button) {
-    button.click();
-    return;
-  }
-
-  window.scrollTo({
-    top: edge === 'top' ? 0 : document.documentElement.scrollHeight,
-    behavior: 'smooth',
-  });
-}
-
-/**
- * Enables the page-context width spoof only while the ChatTOC sidebar is open.
- */
-function setWideViewportSpoofEnabled(enabled) {
-  window.postMessage(
-    {
-      type: WIDTH_SPOOF_MESSAGE_TYPE,
-      enabled,
-    },
-    '*'
-  );
 }
 
 /**
@@ -300,7 +281,9 @@ function resetNavigatorStateForCurrentRoute() {
   // ChatGPT is a SPA, so switching chats can keep this content script alive.
   // Clear per-conversation state when the route changes.
   conversationMessages = [];
-  pinnedPromptIds = loadPinnedPromptIds();
+  initPinnedPrompts();
+  activeNavigatorIndex = null;
+  window.ChatTocOutline?.reset?.();
   navigatorItems = [];
   navigatorSearchQuery = '';
 
@@ -315,8 +298,10 @@ function resetNavigatorStateForCurrentRoute() {
     title.textContent = getConversationTitle();
   }
 
-  hideTooltip();
-  buildNavigator();
+  window.ChatTocTooltip.hide();
+  buildNavigator({
+    refreshObservers: true,
+  });
 }
 
 /**
@@ -345,316 +330,18 @@ function syncNavigatorRouteState() {
  */
 function listenForRouteChanges() {
   currentConversationKey = getCurrentConversationKey();
-  pinnedPromptIds = loadPinnedPromptIds();
+  initPinnedPrompts();
 
   // ChatGPT route changes do not always trigger a full page load.
   setInterval(syncNavigatorRouteState, 250);
 }
 
-function createTooltip() {
-  if (document.getElementById('navigator-tooltip')) return;
-
-  const tooltip = document.createElement('div');
-
-  tooltip.id = 'navigator-tooltip';
-  document.body.appendChild(tooltip);
-}
-
-/**
- * Creates the floating toggle button.
- */
-function createToggleButton(sidebar) {
-  const toggleBtn = document.createElement('button');
-
-  toggleBtn.id = 'toggle-sidebar-btn';
-  toggleBtn.className = 'sidebar-visible';
-  toggleBtn.innerHTML = `
-    <svg aria-hidden="true" viewBox="0 0 64 64">
-      <defs>
-        <mask id="chat-toc-moon-mask">
-          <rect width="64" height="64" fill="black" />
-          <circle cx="32" cy="32" r="24" fill="white" />
-          <circle cx="23" cy="22" r="25" fill="black" />
-        </mask>
-      </defs>
-      <rect width="64" height="64" fill="currentColor" mask="url(#chat-toc-moon-mask)" />
-    </svg>
-  `;
-
-  initToggleButtonDrag(toggleBtn);
-
-  toggleBtn.addEventListener('click', (event) => {
-    if (toggleBtn.dataset.dragged === 'true') {
-      event.preventDefault();
-      toggleBtn.dataset.dragged = 'false';
-      return;
-    }
-
-    const isHidden = sidebar.classList.toggle('navigator-hidden');
-
-    toggleBtn.classList.toggle('sidebar-hidden', isHidden);
-    toggleBtn.classList.toggle('sidebar-visible', !isHidden);
-    setWideViewportSpoofEnabled(!isHidden);
-  });
-
-  document.body.appendChild(toggleBtn);
-}
-
-function initToggleButtonDrag(toggleBtn) {
-  const savedPosition = loadToggleButtonPosition();
-
-  if (savedPosition) {
-    setToggleButtonPosition(toggleBtn, savedPosition.left, savedPosition.top);
-  }
-
-  toggleBtn.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0) return;
-
-    const rect = toggleBtn.getBoundingClientRect();
-    const startX = event.clientX;
-    const startY = event.clientY;
-    const startLeft = rect.left;
-    const startTop = rect.top;
-    let didDrag = false;
-
-    toggleBtn.setPointerCapture(event.pointerId);
-    toggleBtn.classList.add('toggle-sidebar-btn-dragging');
-
-    function handlePointerMove(moveEvent) {
-      const deltaX = moveEvent.clientX - startX;
-      const deltaY = moveEvent.clientY - startY;
-
-      if (!didDrag && Math.hypot(deltaX, deltaY) < 4) {
-        return;
-      }
-
-      didDrag = true;
-
-      const nextPosition = clampToggleButtonPosition(
-        startLeft + deltaX,
-        startTop + deltaY,
-        rect.width,
-        rect.height
-      );
-
-      setToggleButtonPosition(
-        toggleBtn,
-        nextPosition.left,
-        nextPosition.top
-      );
-    }
-
-    function handlePointerUp() {
-      toggleBtn.releasePointerCapture(event.pointerId);
-      toggleBtn.classList.remove('toggle-sidebar-btn-dragging');
-      toggleBtn.removeEventListener('pointermove', handlePointerMove);
-      toggleBtn.removeEventListener('pointerup', handlePointerUp);
-      toggleBtn.removeEventListener('pointercancel', handlePointerUp);
-
-      if (!didDrag) return;
-
-      toggleBtn.dataset.dragged = 'true';
-      saveToggleButtonPosition({
-        left: toggleBtn.offsetLeft,
-        top: toggleBtn.offsetTop,
-      });
-    }
-
-    toggleBtn.addEventListener('pointermove', handlePointerMove);
-    toggleBtn.addEventListener('pointerup', handlePointerUp);
-    toggleBtn.addEventListener('pointercancel', handlePointerUp);
-  });
-}
-
-function setToggleButtonPosition(toggleBtn, left, top) {
-  toggleBtn.style.left = `${left}px`;
-  toggleBtn.style.top = `${top}px`;
-  toggleBtn.style.right = 'auto';
-  toggleBtn.style.bottom = 'auto';
-}
-
-function clampToggleButtonPosition(left, top, width, height) {
-  const margin = 8;
-
-  return {
-    left: Math.min(
-      window.innerWidth - width - margin,
-      Math.max(margin, left)
-    ),
-    top: Math.min(
-      window.innerHeight - height - margin,
-      Math.max(margin, top)
-    ),
-  };
-}
-
-function loadToggleButtonPosition() {
-  try {
-    const rawValue = localStorage.getItem(TOGGLE_BUTTON_POSITION_STORAGE_KEY);
-    const parsedValue = rawValue ? JSON.parse(rawValue) : null;
-
-    if (
-      typeof parsedValue?.left !== 'number' ||
-      typeof parsedValue?.top !== 'number'
-    ) {
-      return null;
-    }
-
-    return clampToggleButtonPosition(
-      parsedValue.left,
-      parsedValue.top,
-      42,
-      42
-    );
-  } catch {
-    return null;
-  }
-}
-
-function saveToggleButtonPosition(position) {
-  try {
-    localStorage.setItem(
-      TOGGLE_BUTTON_POSITION_STORAGE_KEY,
-      JSON.stringify(position)
-    );
-  } catch {}
-}
-
-/**
- * Converts ChatGPT message content and attachments into simple TOC text labels.
- * Non-text parts are kept as readable placeholders so image/file prompts still
- * appear in the navigator.
- */
-function getMessageDisplayText(message) {
-  const parts = message.content?.parts || [];
-  const attachments = message.metadata?.attachments || [];
-  const hasImageAttachment = attachments.some(isImageAttachment);
-  const attachmentParts = attachments.map(getAttachmentDisplayText);
-  const textParts = parts
-    .map((part) => getContentPartDisplayText(part, hasImageAttachment))
-    .filter(Boolean);
-
-  return [...attachmentParts, ...textParts].join('\n').trim();
-}
-
-function getAttachmentDisplayText(file) {
-  const label = isImageAttachment(file) ? 'Image' : 'File';
-
-  return `[${label}] ${file.name || 'Uploaded file'}`;
-}
-
-function getContentPartDisplayText(part, hasImageAttachment) {
-  if (typeof part === 'string') {
-    return part.trim();
-  }
-
-  if (part?.content_type === 'image_asset_pointer') {
-    return hasImageAttachment ? '' : '[Image]';
-  }
-
-  if (part?.content_type) {
-    return `[${part.content_type}]`;
-  }
-
-  return '[Attachment]';
-}
-
-function isImageAttachment(file) {
-  const mimeType = file.mime_type || file.mimeType || '';
-  const name = file.name || '';
-
-  return (
-    mimeType.startsWith('image/') ||
-    /\.(apng|avif|gif|jpe?g|png|svg|webp)$/i.test(name)
-  );
-}
-
-function getMessageTextParts(message) {
-  return (message.content?.parts || [])
-    .filter((part) => typeof part === 'string')
-    .map((part) => part.trim())
-    .filter(Boolean);
-}
-
-function hasRenderableMessageText(message) {
-  return getMessageTextParts(message).length > 0;
-}
-
-function hasNonTextMessageContent(message) {
-  const parts = message.content?.parts || [];
-  const attachments = message.metadata?.attachments || [];
-
-  return (
-    attachments.length > 0 ||
-    parts.some((part) => typeof part !== 'string')
-  );
-}
-
-function isTextMatchableMessage(message) {
-  return (
-    hasRenderableMessageText(message) &&
-    !hasNonTextMessageContent(message)
-  );
-}
-
-function createNavigatorMessage(message) {
-  const text = getMessageDisplayText(message);
-
-  return {
-    id: message.id,
-    text,
-    canMatchByText: isTextMatchableMessage(message),
-    createTime: message.create_time ?? message.createTime ?? 0,
-  };
-}
-
-/**
- * Walks the current conversation branch from current_node back to the root.
- * ChatGPT's mapping can contain alternate branches, so this avoids listing
- * prompts outside the active branch.
- */
-function getOrderedConversationNodes(data) {
-  const mapping = data.mapping;
-  const orderedNodes = [];
-
-  let currentNodeId = data.current_node;
-
-  while (currentNodeId) {
-    const node = mapping[currentNodeId];
-
-    if (!node) break;
-
-    orderedNodes.push(node);
-
-    currentNodeId = node.parent;
-  }
-
-  return orderedNodes.reverse();
-}
-
-/**
- * Extracts user prompts from ChatGPT's conversation payload in display order.
- */
-function extractUserMessages(data) {
-  if (!data || !data.mapping) {
-    console.warn('Invalid conversation data received');
-    return [];
-  }
-
-  const orderedNodes = getOrderedConversationNodes(data);
-
-  return orderedNodes
-    .filter((node) => node.message?.author?.role === 'user')
-    .map((node) => {
-      return createNavigatorMessage(node.message);
-    })
-    .filter((message) => message.text.length > 0);
-}
-
 /**
  * Builds the sidebar list from conversationMessages.
+ * @param {Object} [options]
+ * @param {boolean} [options.refreshObservers=false] Whether to re-observe page messages after rebuilding.
  */
-function buildNavigator() {
+function buildNavigator({ refreshObservers = false } = {}) {
   const list = document.getElementById('navigator-list');
   const hint = document.querySelector('.navigator-hint');
 
@@ -662,6 +349,8 @@ function buildNavigator() {
 
   list.innerHTML = '';
   navigatorItems = []; // Reset navigator items for new build
+  window.ChatTocOutline?.resetPromptItems?.();
+  window.ChatTocOutline?.setPromptMessages?.(conversationMessages);
 
   // Filter messages by search query
   const normalizedQuery = normalizeText(navigatorSearchQuery).toLowerCase();
@@ -692,79 +381,101 @@ function buildNavigator() {
     const fullText = message.text.replace(/\s+/g, ' ');
 
     const item = document.createElement('div');
+    const itemMain = document.createElement('div');
     const itemText = document.createElement('span');
-    const pinButton = document.createElement('button');
 
     item.dataset.messageIndex = String(index);
     item.className = 'navigator-item';
 
+    if (index === activeNavigatorIndex) {
+      item.classList.add('navigator-item-active');
+    }
+
+    const pinButton = window.ChatTocPin.createButton({
+      item,
+      messageId: message.id,
+    });
+
+    itemMain.className = 'navigator-item-main';
+
     itemText.className = 'navigator-item-text';
     itemText.textContent = `${index + 1}. ${fullText}`;
 
-    pinButton.className = 'navigator-pin-btn';
-    pinButton.type = 'button';
-    pinButton.innerHTML = `
-      <svg aria-hidden="true" viewBox="0 0 24 24">
-        <g transform="rotate(45 12 12)">
-          <path d="M8 4h8l-1 7 3 3v2H6v-2l3-3-1-7Z" />
-          <path d="M12 16v5" />
-        </g>
-      </svg>
-    `;
-
-    setPinnedNavigatorItemState(
+    const outlineControls = window.ChatTocOutline?.createPromptItem?.({
       item,
-      pinButton,
-      pinnedPromptIds.has(message.id)
-    );
+      index,
+      messageId: message.id,
+    });
 
     navigatorItems[index] = item;
 
     item.addEventListener('click', () => {
-      hideTooltip();
-      jumpToMessage(message, index);
+      handleNavigatorItemClick(message, index);
     });
 
-    pinButton.addEventListener('click', (event) => {
-      event.stopPropagation();
+    itemMain.append(
+      itemText,
+      outlineControls?.outlineIndicator || document.createElement('span'),
+      pinButton
+    );
+    item.append(itemMain);
 
-      const isPinned = togglePinnedPrompt(message.id);
+    if (outlineControls?.outlineList) {
+      item.appendChild(outlineControls.outlineList);
+    }
 
-      setPinnedNavigatorItemState(item, pinButton, isPinned);
-      pinButton.blur();
-    });
-
-    item.append(itemText, pinButton);
     list.appendChild(item);
 
-    if (isTextTruncated(itemText)) {
-      item.addEventListener('mouseenter', (event) => {
-        showTooltip(message.text, event);
-      });
+    item.addEventListener('mouseenter', (event) => {
+      if (isTextTruncated(itemText)) {
+        window.ChatTocTooltip.show(message.text, event);
+      }
+    });
 
-      item.addEventListener('mouseleave', () => {
-        hideTooltip();
-      });
-    }
+    item.addEventListener('mouseleave', () => {
+      window.ChatTocTooltip.hide();
+    });
   });
 
-  observeVisibleUserMessages(); // Re-observe messages after rebuilding the navigator
+  if (refreshObservers) {
+    observeVisibleUserMessages();
+  }
 }
 
-function setPinnedNavigatorItemState(item, pinButton, isPinned) {
-  item.classList.toggle('navigator-item-pinned', isPinned);
-  pinButton.classList.toggle('navigator-pin-btn-active', isPinned);
-  pinButton.setAttribute('aria-pressed', String(isPinned));
-  pinButton.setAttribute(
-    'aria-label',
-    isPinned ? 'Unpin prompt' : 'Pin prompt'
+/**
+ * Handles prompt row clicks, including outline toggling and chat navigation.
+ * @param {Object} message
+ * @param {number} index
+ */
+function handleNavigatorItemClick(message, index) {
+  window.ChatTocTooltip.hide();
+
+  const outlineAction = window.ChatTocOutline?.handlePromptNavigation?.(
+    index,
+    activeNavigatorIndex
   );
+
+  window.ChatTocJump.jumpToMessage(message, index);
+
+  if (outlineAction?.shouldBuild) {
+    window.ChatTocOutline?.scheduleBuild?.(index);
+  }
 }
 
+/**
+ * Returns whether an element's text overflows its visible width.
+ * @param {HTMLElement} element
+ * @returns {boolean}
+ */
 function isTextTruncated(element) {
   return element.scrollWidth > element.clientWidth;
 }
 
+/**
+ * Normalizes whitespace for prompt text comparisons and search.
+ * @param {string} text
+ * @returns {string}
+ */
 function normalizeText(text) {
   return text.replace(/\s+/g, ' ').trim();
 }
@@ -774,6 +485,8 @@ function normalizeText(text) {
  * @param {number} index
  */
 function forceActiveNavigatorItem(index) {
+  activeNavigatorIndex = index;
+
   navigatorItems.forEach((item) => {
     item.classList.remove('navigator-item-active');
   });
@@ -813,6 +526,7 @@ function setActiveNavigatorItem(index) {
 function lockActiveNavigatorItem(index, duration = 1800) {
   clearTimeout(lockedNavigatorTimer);
 
+  window.ChatTocFollow.keepFollowing(duration);
   lockedNavigatorIndex = index;
   forceActiveNavigatorItem(index);
 
@@ -830,7 +544,7 @@ function scrollNavigatorItemIntoView(item) {
   const scrollContainer = document.getElementById('navigator-list');
 
   if (!scrollContainer) return;
-  if (scrollContainer.matches(':hover')) return;
+  if (!window.ChatTocFollow.isFollowing()) return;
 
   const itemRect = item.getBoundingClientRect();
   const containerRect = scrollContainer.getBoundingClientRect();
@@ -1037,81 +751,6 @@ function initActivePromptTracking() {
 }
 
 /**
- * Shows a tooltip with the full message text when hovering over a truncated item.
- * @param {string} text
- * @param {MouseEvent} event
- */
-function showTooltip(text, event) {
-  const tooltip = document.getElementById('navigator-tooltip');
-
-  if (!tooltip) return;
-
-  clearTimeout(tooltipHideTimer);
-  clearTimeout(tooltipShowTimer);
-
-  tooltipHideTimer = null;
-  tooltipShowTimer = null;
-  tooltip.classList.remove('visible');
-
-  const clientX = event.clientX;
-  const clientY = event.clientY;
-
-  tooltipShowTimer = setTimeout(() => {
-    tooltip.textContent = text;
-    tooltip.classList.add('visible');
-
-    const gap = 8;
-    const margin = 16;
-    const scrollContainer = document.getElementById('navigator-list');
-    const containerRect = scrollContainer?.getBoundingClientRect();
-
-    let y = clientY + 15;
-
-    const rect = tooltip.getBoundingClientRect();
-    const x = containerRect
-      ? Math.max(margin, containerRect.left - rect.width - gap)
-      : Math.max(margin, clientX - rect.width - gap);
-
-    if (y + rect.height > window.innerHeight) {
-      y = window.innerHeight - rect.height - margin;
-    }
-
-    tooltip.style.left = `${x}px`;
-    tooltip.style.top = `${y}px`;
-  }, TOOLTIP_SHOW_DELAY_MS);
-}
-
-function hideTooltip() {
-  const tooltip = document.getElementById('navigator-tooltip');
-
-  if (!tooltip) return;
-
-  clearTimeout(tooltipHideTimer);
-  clearTimeout(tooltipShowTimer);
-
-  tooltipShowTimer = null;
-
-  tooltipHideTimer = setTimeout(() => {
-    tooltip.classList.remove('visible');
-    tooltipHideTimer = null;
-  }, TOOLTIP_HIDE_DELAY_MS);
-}
-
-function initTooltip() {
-  const tooltip = document.getElementById('navigator-tooltip');
-
-  if (!tooltip) return;
-
-  tooltip.addEventListener('mouseenter', () => {
-    clearTimeout(tooltipHideTimer);
-  });
-
-  tooltip.addEventListener('mouseleave', () => {
-    hideTooltip();
-  });
-}
-
-/**
  * Handles the full conversation payload captured by pageHook.js and rebuilds
  * the navigator from the active conversation branch.
  */
@@ -1126,11 +765,11 @@ function handleConversationData(data) {
     title.textContent = getConversationTitle();
   }
 
-  conversationMessages = extractUserMessages(data);
+  conversationMessages = window.ChatTocMessages.extractUserMessages(data);
 
-  console.log('✅ [Navigator] update navigator', conversationMessages.length);
-
-  buildNavigator();
+  buildNavigator({
+    refreshObservers: true,
+  });
 }
 
 /**
@@ -1144,6 +783,13 @@ function listenForConversationData() {
 
     syncNavigatorRouteState();
 
+    if (
+      event.data?.routeKey &&
+      event.data.routeKey !== getCurrentConversationKey()
+    ) {
+      return;
+    }
+
     if (event.data?.type === 'CHATGPT_CONVERSATION_DATA') {
       handleConversationData(event.data.payload);
     }
@@ -1151,245 +797,29 @@ function listenForConversationData() {
     if (event.data?.type === 'CHATGPT_NEW_USER_MESSAGE') {
       const newMessage = event.data.payload;
 
-      console.log(
-        '[Navigator] Captured input message:',
-        getMessageDisplayText(newMessage)
-      );
-      console.log('[Navigator] New user message:', newMessage);
-      console.log('[Navigator] before:', conversationMessages.length);
-
       const exists = conversationMessages.some(
         (message) => message.id === newMessage.id
       );
 
       if (!exists) {
-        const normalizedMessage = createNavigatorMessage(newMessage);
+        const normalizedMessage =
+          window.ChatTocMessages.createNavigatorMessage(newMessage);
 
         conversationMessages.push(normalizedMessage);
-        buildNavigator();
-
-        console.log('❤️[Navigator] after:', conversationMessages.length);
-      } else {
-        console.log('❤️[Navigator] duplicate message ignored');
+        buildNavigator({
+          refreshObservers: true,
+        });
       }
     }
   });
 }
 
 /**
- * Applies a temporary highlight effect to a rendered prompt element.
- * @param {HTMLElement} element
+ * Starts ChatTOC after all helper modules have been loaded by manifest.json.
  */
-function highlightMatchedElement(element) {
-  element.style.outline = '2px solid #60a5fa';
-  element.style.borderRadius = '8px';
-
-  setTimeout(() => {
-    element.style.outline = '';
-    element.style.borderRadius = '';
-  }, 1200);
-}
-
-/** Scrolls to the given element and applies a temporary highlight effect.
- * @param {HTMLElement} element
- */
-function scrollToMatchedElement(element) {
-  element.scrollIntoView({
-    behavior: 'smooth',
-    block: 'center',
-  });
-
-  highlightMatchedElement(element);
-}
-
-/**
- * Jumps to a prompt. Prefer ChatGPT's built-in prompt navigator because it can
- * scroll virtualized conversations; DOM text/index fallbacks only work for
- * messages currently rendered in the page.
- * @param {Object} message
- * @param {number} index
- */
-function jumpToMessage(message, index) {
-  lockActiveNavigatorItem(index, message.canMatchByText ? 1800 : 4000);
-
-  if (jumpToPromptByIndex(index)) {
-    retryHighlightJumpTarget(
-      message,
-      index,
-      getNonTextJumpStartElement(message)
-    );
-
-    return;
-  }
-
-  if (message.canMatchByText && jumpToUserMessageByText(message.text)) return;
-
-  jumpToVisibleUserMessageByIndex(index);
-}
-
-/**
- * Clicks ChatGPT's built-in prompt navigator item. This depends on ChatGPT's
- * current aria-label convention and is why pageHook.js keeps that navigator
- * mounted in split-view layouts.
- * @param {number} index
- * @returns true if jump succeeded, false otherwise
- */
-function jumpToPromptByIndex(index) {
-  const buttons = getNativePromptButtons();
-  const button = buttons[index];
-
-  if (!button) {
-    return false;
-  }
-
-  button.click();
-  return true;
-}
-
-/**
- * Fallback for already-rendered messages: find a user message whose DOM text
- * matches the captured prompt text.
- * @param {string} text
- * @returns {boolean} true if jump succeeded, false otherwise
- */
-function jumpToUserMessageByText(text) {
-  const targetText = normalizeText(text);
-
-  const userMessageElements = Array.from(
-    document.querySelectorAll('[data-message-author-role="user"]')
-  );
-
-  const matchedElement = userMessageElements.find((element) => {
-    const domText = normalizeText(element.innerText);
-    return domText === targetText || domText.includes(targetText);
-  });
-
-  if (!matchedElement) {
-    return false;
-  }
-
-  scrollToMatchedElement(matchedElement);
-  return true;
-}
-
-/**
- * Last-resort fallback for non-virtualized pages where all user messages are
- * present in the DOM.
- * @param {number} index
- * @returns true if jump succeeded, false otherwise
- */
-function jumpToVisibleUserMessageByIndex(index) {
-  const messages = Array.from(
-    document.querySelectorAll('[data-message-author-role="user"]')
-  );
-
-  const message = messages[index];
-
-  if (!message) {
-    console.log('[Navigator] Visible user message not found:', index + 1);
-    return false;
-  }
-
-  scrollToMatchedElement(message);
-  return true;
-}
-
-/**
- * Retries highlighting after ChatGPT's built-in prompt navigator scrolls.
- * Pure text prompts can be matched by DOM text; prompts with files/images fall
- * back to the user message closest to the viewport center after the scroll.
- * @param {Object} message
- * @param {number} index
- * @param {HTMLElement | null} startElement
- * @param {number} attempts
- */
-function retryHighlightJumpTarget(
-  message,
-  index,
-  startElement = null,
-  attempts = 14
-) {
-  if (message.canMatchByText && jumpToUserMessageByText(message.text)) return;
-
-  if (
-    !message.canMatchByText &&
-    highlightNonTextJumpTarget(index, startElement, attempts)
-  ) {
-    return;
-  }
-
-  if (attempts <= 1) return;
-
-  setTimeout(() => {
-    retryHighlightJumpTarget(message, index, startElement, attempts - 1);
-  }, message.canMatchByText ? 150 : 250);
-}
-
-/**
- * Captures the current center message before a non-text prompt jump starts so
- * retry logic can avoid highlighting the old scroll position.
- * @param {Object} message
- * @returns {HTMLElement | null}
- */
-function getNonTextJumpStartElement(message) {
-  return message.canMatchByText ? null : getCenteredVisibleUserMessage();
-}
-
-/**
- * Highlights the non-text jump target without scrolling. ChatGPT's built-in
- * prompt navigator owns the actual scroll for file/image prompts.
- * @param {number} index
- * @param {HTMLElement | null} startElement
- * @param {number} attempts
- */
-function highlightNonTextJumpTarget(index, startElement, attempts) {
-  const message = getCenteredVisibleUserMessage();
-
-  if (!message) return false;
-
-  const isRepeatClick =
-    index === lastNonTextHighlightIndex &&
-    message === lastNonTextHighlightElement;
-  const shouldWaitForScroll = attempts > 1 && !isRepeatClick;
-
-  if (shouldWaitForScroll && message === startElement) {
-    return false;
-  }
-
-  highlightMatchedElement(message);
-  lastNonTextHighlightIndex = index;
-  lastNonTextHighlightElement = message;
-  return true;
-}
-
-/**
- * Returns the visible user message whose center is closest to the viewport
- * center, or null if no user message is currently rendered.
- */
-function getCenteredVisibleUserMessage() {
-  const messages = Array.from(
-    document.querySelectorAll('[data-message-author-role="user"]')
-  );
-
-  if (messages.length === 0) return null;
-
-  const viewportCenter = window.innerHeight / 2;
-  return messages
-    .map((element) => {
-      const rect = element.getBoundingClientRect();
-      const center = rect.top + rect.height / 2;
-
-      return {
-        element,
-        distance: Math.abs(center - viewportCenter),
-      };
-    })
-    .sort((a, b) => a.distance - b.distance)[0]?.element;
-}
-
 async function main() {
   injectFetchHook(); // Start intercepting conversation data
-  pinnedPromptIds = loadPinnedPromptIds();
+  initPinnedPrompts();
 
   listenForConversationData(); // Listen for data sent from the fetch hook
 
@@ -1398,10 +828,11 @@ async function main() {
   initSidebarResize(sidebar);
   listenForRouteChanges();
   initActivePromptTracking();
-  createToggleButton(sidebar);
+  window.ChatTocToggleButton.create(sidebar);
 
-  createTooltip();
-  initTooltip();
+  window.ChatTocTooltip.init({
+    anchorSelector: '#navigator-list',
+  });
 }
 
 main();
