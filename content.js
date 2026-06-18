@@ -25,6 +25,7 @@ const TOOLTIP_SHOW_DELAY_MS = 500;
 const TOOLTIP_HIDE_DELAY_MS = 200;
 const WIDTH_SPOOF_MESSAGE_TYPE = 'CHATGPT_NAVIGATOR_SET_WIDTH_SPOOF';
 const PINNED_PROMPTS_STORAGE_PREFIX = 'chatToc:pinned:';
+const TOGGLE_BUTTON_POSITION_STORAGE_KEY = 'chatToc:toggleButtonPosition';
 const NATIVE_PROMPT_BUTTON_SELECTORS = [
   'button[aria-label^="Prompt "]',
   'button[aria-label^="prompt "]',
@@ -367,9 +368,28 @@ function createToggleButton(sidebar) {
 
   toggleBtn.id = 'toggle-sidebar-btn';
   toggleBtn.className = 'sidebar-visible';
-  toggleBtn.innerHTML = '☰';
+  toggleBtn.innerHTML = `
+    <svg aria-hidden="true" viewBox="0 0 64 64">
+      <defs>
+        <mask id="chat-toc-moon-mask">
+          <rect width="64" height="64" fill="black" />
+          <circle cx="32" cy="32" r="24" fill="white" />
+          <circle cx="23" cy="22" r="25" fill="black" />
+        </mask>
+      </defs>
+      <rect width="64" height="64" fill="currentColor" mask="url(#chat-toc-moon-mask)" />
+    </svg>
+  `;
 
-  toggleBtn.addEventListener('click', () => {
+  initToggleButtonDrag(toggleBtn);
+
+  toggleBtn.addEventListener('click', (event) => {
+    if (toggleBtn.dataset.dragged === 'true') {
+      event.preventDefault();
+      toggleBtn.dataset.dragged = 'false';
+      return;
+    }
+
     const isHidden = sidebar.classList.toggle('navigator-hidden');
 
     toggleBtn.classList.toggle('sidebar-hidden', isHidden);
@@ -378,6 +398,126 @@ function createToggleButton(sidebar) {
   });
 
   document.body.appendChild(toggleBtn);
+}
+
+function initToggleButtonDrag(toggleBtn) {
+  const savedPosition = loadToggleButtonPosition();
+
+  if (savedPosition) {
+    setToggleButtonPosition(toggleBtn, savedPosition.left, savedPosition.top);
+  }
+
+  toggleBtn.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+
+    const rect = toggleBtn.getBoundingClientRect();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startLeft = rect.left;
+    const startTop = rect.top;
+    let didDrag = false;
+
+    toggleBtn.setPointerCapture(event.pointerId);
+    toggleBtn.classList.add('toggle-sidebar-btn-dragging');
+
+    function handlePointerMove(moveEvent) {
+      const deltaX = moveEvent.clientX - startX;
+      const deltaY = moveEvent.clientY - startY;
+
+      if (!didDrag && Math.hypot(deltaX, deltaY) < 4) {
+        return;
+      }
+
+      didDrag = true;
+
+      const nextPosition = clampToggleButtonPosition(
+        startLeft + deltaX,
+        startTop + deltaY,
+        rect.width,
+        rect.height
+      );
+
+      setToggleButtonPosition(
+        toggleBtn,
+        nextPosition.left,
+        nextPosition.top
+      );
+    }
+
+    function handlePointerUp() {
+      toggleBtn.releasePointerCapture(event.pointerId);
+      toggleBtn.classList.remove('toggle-sidebar-btn-dragging');
+      toggleBtn.removeEventListener('pointermove', handlePointerMove);
+      toggleBtn.removeEventListener('pointerup', handlePointerUp);
+      toggleBtn.removeEventListener('pointercancel', handlePointerUp);
+
+      if (!didDrag) return;
+
+      toggleBtn.dataset.dragged = 'true';
+      saveToggleButtonPosition({
+        left: toggleBtn.offsetLeft,
+        top: toggleBtn.offsetTop,
+      });
+    }
+
+    toggleBtn.addEventListener('pointermove', handlePointerMove);
+    toggleBtn.addEventListener('pointerup', handlePointerUp);
+    toggleBtn.addEventListener('pointercancel', handlePointerUp);
+  });
+}
+
+function setToggleButtonPosition(toggleBtn, left, top) {
+  toggleBtn.style.left = `${left}px`;
+  toggleBtn.style.top = `${top}px`;
+  toggleBtn.style.right = 'auto';
+  toggleBtn.style.bottom = 'auto';
+}
+
+function clampToggleButtonPosition(left, top, width, height) {
+  const margin = 8;
+
+  return {
+    left: Math.min(
+      window.innerWidth - width - margin,
+      Math.max(margin, left)
+    ),
+    top: Math.min(
+      window.innerHeight - height - margin,
+      Math.max(margin, top)
+    ),
+  };
+}
+
+function loadToggleButtonPosition() {
+  try {
+    const rawValue = localStorage.getItem(TOGGLE_BUTTON_POSITION_STORAGE_KEY);
+    const parsedValue = rawValue ? JSON.parse(rawValue) : null;
+
+    if (
+      typeof parsedValue?.left !== 'number' ||
+      typeof parsedValue?.top !== 'number'
+    ) {
+      return null;
+    }
+
+    return clampToggleButtonPosition(
+      parsedValue.left,
+      parsedValue.top,
+      42,
+      42
+    );
+  } catch {
+    return null;
+  }
+}
+
+function saveToggleButtonPosition(position) {
+  try {
+    localStorage.setItem(
+      TOGGLE_BUTTON_POSITION_STORAGE_KEY,
+      JSON.stringify(position)
+    );
+  } catch {}
 }
 
 /**

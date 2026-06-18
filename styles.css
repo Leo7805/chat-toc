@@ -112,27 +112,31 @@
 #toggle-sidebar-btn {
   position: fixed;
   right: 20px;
-  bottom: 20px;
+  bottom: 100px;
   width: 42px;
   height: 42px;
   z-index: 1000000;
   border-radius: 50%;
-  background: #1f3b73;
-  color: white;
+  background: transparent;
+  color: #93c5fd;
   border: none;
   cursor: pointer;
   font-size: 20px;
   line-height: 1;
+  opacity: 0.6;
+  touch-action: none;
   display: grid;
   place-items: center;
   transition:
     background-color 120ms ease,
     color 120ms ease,
+    opacity 120ms ease,
     transform 120ms ease;
 }
 
 #toggle-sidebar-btn:hover {
-  background: #2563eb;
+  color: #bfdbfe;
+  opacity: 0.8;
   transform: translateY(-1px);
 }
 
@@ -140,14 +144,24 @@
   transform: translateY(0);
 }
 
+#toggle-sidebar-btn.toggle-sidebar-btn-dragging {
+  cursor: grabbing;
+  transition: none;
+  transform: none;
+}
+
 #toggle-sidebar-btn.sidebar-hidden {
-  background: #374151;
   color: #d1d5db;
 }
 
 #toggle-sidebar-btn.sidebar-hidden:hover {
-  background: #4b5563;
   color: white;
+}
+
+#toggle-sidebar-btn svg {
+  width: 42px;
+  height: 42px;
+  display: block;
 }
 
 .navigator-icon-btn span {
