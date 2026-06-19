@@ -19,10 +19,12 @@ ChatTOC helps you navigate long conversations by automatically turning your prom
 - Search and filter prompts
 - Highlights the prompt currently visible in the conversation
 - Preview full prompt content on hover
+- View the full conversation title from the sidebar title tooltip
 - Automatically updates when new prompts are sent
 - Resizable sidebar
-- Show/hide toggle button
-- Refresh button to rebuild the TOC
+- Pinnable sidebar with optional hover-based auto-hide
+- Draggable floating toggle button with per-tab position memory
+- SVG refresh button to rebuild the TOC
 - Detects text, image, and file prompts
 - Works entirely in the browser
 
@@ -53,7 +55,8 @@ ChatTOC helps you navigate long conversations by automatically turning your prom
 4. Use the search box to filter prompts.
 5. Hover over a truncated prompt to preview the full content.
 6. Drag the left edge of the sidebar to resize it.
-7. Use the floating button to collapse or expand the sidebar.
+7. Use the sidebar pin button to keep the sidebar open or enable auto-hide.
+8. Hover the floating button to reveal an auto-hidden sidebar, or drag it to reposition it for the current tab.
 
 ---
 

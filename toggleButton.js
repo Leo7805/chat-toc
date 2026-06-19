@@ -2,14 +2,15 @@
  * Builds and manages the floating ChatTOC sidebar toggle button.
  */
 (function () {
-  const WIDTH_SPOOF_MESSAGE_TYPE = 'CHATGPT_NAVIGATOR_SET_WIDTH_SPOOF';
   const POSITION_MARGIN = 8;
+  const RIGHT_POSITION_MARGIN = 0;
+  const POSITION_STORAGE_KEY = 'chatTocToggleButtonPosition';
 
   /**
    * Creates the floating toggle button.
-   * @param {HTMLElement} sidebar
+   * @returns {HTMLButtonElement}
    */
-  function create(sidebar) {
+  function create() {
     const toggleBtn = document.createElement('button');
 
     toggleBtn.id = 'toggle-sidebar-btn';
@@ -23,22 +24,11 @@
       </svg>
     `;
 
-    toggleBtn.addEventListener('click', (event) => {
-      if (toggleBtn.dataset.dragged === 'true') {
-        event.preventDefault();
-        toggleBtn.dataset.dragged = 'false';
-        return;
-      }
-
-      const isHidden = sidebar.classList.toggle('navigator-hidden');
-
-      toggleBtn.classList.toggle('sidebar-hidden', isHidden);
-      toggleBtn.classList.toggle('sidebar-visible', !isHidden);
-      setWideViewportSpoofEnabled(!isHidden);
-    });
-
     document.body.appendChild(toggleBtn);
     initDrag(toggleBtn);
+    restorePosition(toggleBtn);
+
+    return toggleBtn;
   }
 
   /**
@@ -93,6 +83,7 @@
         if (!didDrag) return;
 
         toggleBtn.dataset.dragged = 'true';
+        savePosition(toggleBtn);
       }
 
       toggleBtn.addEventListener('pointermove', handlePointerMove);
@@ -132,6 +123,7 @@
     }
 
     setPosition(toggleBtn, nextPosition.left, nextPosition.top);
+    savePosition(toggleBtn);
   }
 
   /**
@@ -145,7 +137,7 @@
   function clampPosition(left, top, width, height) {
     const maxLeft = Math.max(
       POSITION_MARGIN,
-      window.innerWidth - width - POSITION_MARGIN
+      window.innerWidth - width - RIGHT_POSITION_MARGIN
     );
     const maxTop = Math.max(
       POSITION_MARGIN,
@@ -158,18 +150,51 @@
     };
   }
 
-  /**
-   * Enables the page-context width spoof only while the ChatTOC sidebar is open.
-   * @param {boolean} enabled
-   */
-  function setWideViewportSpoofEnabled(enabled) {
-    window.postMessage(
-      {
-        type: WIDTH_SPOOF_MESSAGE_TYPE,
-        enabled,
-      },
-      '*'
+  function restorePosition(toggleBtn) {
+    const savedPosition = storageGet(POSITION_STORAGE_KEY);
+
+    if (!savedPosition || typeof savedPosition !== 'object') return;
+    if (
+      !Number.isFinite(savedPosition.left) ||
+      !Number.isFinite(savedPosition.top)
+    ) {
+      return;
+    }
+
+    const rect = toggleBtn.getBoundingClientRect();
+    const nextPosition = clampPosition(
+      savedPosition.left,
+      savedPosition.top,
+      rect.width,
+      rect.height
     );
+
+    setPosition(toggleBtn, nextPosition.left, nextPosition.top);
+  }
+
+  function savePosition(toggleBtn) {
+    const rect = toggleBtn.getBoundingClientRect();
+
+    storageSet(POSITION_STORAGE_KEY, {
+      left: rect.left,
+      top: rect.top,
+    });
+  }
+
+  function storageGet(key) {
+    try {
+      const rawValue = sessionStorage.getItem(key);
+
+      return rawValue ? JSON.parse(rawValue) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function storageSet(key, value) {
+    try {
+      sessionStorage.setItem(key, JSON.stringify(value));
+    } catch {}
   }
 
   window.ChatTocToggleButton = {

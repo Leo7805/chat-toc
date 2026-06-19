@@ -26,6 +26,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transition: transform 160ms ease;
 }
 
 .navigator-topbar {
@@ -36,12 +37,12 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding-bottom: 40vh;
+  padding-bottom: 80vh;
 }
 
 .navigator-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px;
+  grid-template-columns: 28px minmax(0, 1fr) 28px;
   align-items: center;
   gap: 8px;
   margin-bottom: 12px;
@@ -132,15 +133,64 @@
   background: #4b5563;
 }
 
+.navigator-header-icon-btn {
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  color: #9ca3af;
+  opacity: 0.86;
+  transform: none;
+  transition:
+    color 120ms ease,
+    opacity 120ms ease;
+}
+
+.navigator-header-icon-btn:hover,
+.navigator-header-icon-btn:active {
+  background: transparent;
+  color: #93c5fd;
+  opacity: 1;
+}
+
+.navigator-icon-btn.navigator-header-icon-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.sidebar-pin-btn {
+  justify-self: start;
+}
+
+.sidebar-pin-btn svg {
+  transform: rotate(-35deg);
+  transition: transform 120ms ease;
+}
+
+.sidebar-pin-btn.sidebar-pin-active,
+.sidebar-pin-btn.sidebar-pin-active:hover {
+  color: #93c5fd;
+  opacity: 1;
+}
+
+.sidebar-pin-btn.sidebar-pin-active svg {
+  transform: rotate(0deg);
+}
+
 /* Hidden State */
 #conversation-navigator-sidebar.navigator-hidden {
-  display: none !important;
+  pointer-events: none;
+  transform: translateX(100%);
+}
+
+#conversation-navigator-sidebar.navigator-initializing {
+  visibility: hidden;
 }
 
 #toggle-sidebar-btn {
   position: fixed;
-  right: 20px;
-  bottom: 100px;
+  right: 0;
+  top: calc(50% - 21px);
+  bottom: auto;
   width: 42px;
   height: 42px;
   z-index: 1000000;
@@ -201,10 +251,6 @@
   display: block;
   font-size: 24px;
   line-height: 1;
-}
-
-#refresh-toc-btn span {
-  transform: translate(2px, -2px);
 }
 
 .navigator-action-rail .navigator-icon-btn span {

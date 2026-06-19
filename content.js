@@ -80,16 +80,41 @@ async function createSidebar() {
   const conversationTitle = escapeHtml(getConversationTitle());
 
   sidebar.id = 'conversation-navigator-sidebar';
+  sidebar.className = 'navigator-initializing';
 
   sidebar.innerHTML = `
     <div id="navigator-resizer"></div>
     <div class="navigator-topbar">
       <div class="navigator-header">
-        <button id="navigator-title" type="button" aria-label="Reset TOC view">
+        <button
+          class="navigator-icon-btn navigator-header-icon-btn sidebar-pin-btn"
+          id="sidebar-pin-btn"
+          type="button"
+          aria-label="Enable sidebar auto-hide"
+          aria-pressed="true"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M12 17v5M7 3h10l-1 8 4 4v2H4v-2l4-4-1-8Z" />
+          </svg>
+        </button>
+        <button
+          id="navigator-title"
+          type="button"
+          aria-label="Reset TOC view"
+          title="${conversationTitle}"
+        >
           ${conversationTitle}
         </button>
-        <button class="navigator-icon-btn" id="refresh-toc-btn" type="button" aria-label="Refresh TOC">
-          <span aria-hidden="true">⟳</span>
+        <button
+          class="navigator-icon-btn navigator-header-icon-btn"
+          id="refresh-toc-btn"
+          type="button"
+          aria-label="Refresh TOC"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M20 6v5h-5" />
+            <path d="M20 11a8 8 0 1 0-2.34 5.66" />
+          </svg>
         </button>
       </div>
 
@@ -330,6 +355,20 @@ function escapeHtml(text) {
 }
 
 /**
+ * Updates the sidebar title text and its hover tooltip together.
+ */
+function setNavigatorTitle() {
+  const title = document.getElementById('navigator-title');
+
+  if (!title) return;
+
+  const nextTitle = getConversationTitle();
+
+  title.textContent = nextTitle;
+  title.title = nextTitle;
+}
+
+/**
  * Reloads the page so ChatGPT and ChatTOC both rebuild from fresh state.
  */
 function reloadCurrentPageData() {
@@ -376,15 +415,12 @@ function resetNavigatorStateForCurrentRoute() {
   navigatorSearchQuery = '';
 
   const search = document.getElementById('navigator-search');
-  const title = document.getElementById('navigator-title');
 
   if (search) {
     search.value = '';
   }
 
-  if (title) {
-    title.textContent = getConversationTitle();
-  }
+  setNavigatorTitle();
 
   window.ChatTocTooltip.hide();
   buildNavigator({
@@ -858,11 +894,7 @@ function handleConversationData(data) {
     return;
   }
 
-  const title = document.getElementById('navigator-title');
-
-  if (title) {
-    title.textContent = getConversationTitle();
-  }
+  setNavigatorTitle();
 
   conversationMessages = window.ChatTocMessages.extractUserMessages(data);
 
@@ -932,7 +964,8 @@ async function main() {
   initSidebarResize(sidebar);
   listenForRouteChanges();
   initActivePromptTracking();
-  window.ChatTocToggleButton.create(sidebar);
+  const toggleBtn = window.ChatTocToggleButton.create();
+  window.ChatTocSidebarVisibility.init(sidebar, toggleBtn);
 
   window.ChatTocTooltip.init({
     anchorSelector: '#navigator-list',
