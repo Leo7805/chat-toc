@@ -51,7 +51,7 @@ graph TD
   - [outline.js](file:///Users/leo/🔥Projects/chrome-plugins/chat-toc/outline.js): Extracts header trees (`H1`-`H6`) from assistant answers and manages outline expands/collapses.
   - [follow.js](file:///Users/leo/🔥Projects/chrome-plugins/chat-toc/follow.js): Manages scroll tracking on the chat feed and coordinates when the sidebar is allowed to auto-scroll.
   - [message.js](file:///Users/leo/🔥Projects/chrome-plugins/chat-toc/message.js): Parses ChatGPT's JSON payloads and normalizes user inputs/files/images into TOC labels.
-  - [promptMark.js](file:///Users/leo/🔥Projects/chrome-plugins/chat-toc/promptMark.js): Handles session-scoped prompt marking (stars).
+  - [promptMark.js](file:///Users/leo/🔥Projects/chrome-plugins/chat-toc/promptMark.js): Handles session-scoped prompt marking (bookmark icon).
   - [jump.js](file:///Users/leo/🔥Projects/chrome-plugins/chat-toc/jump.js): Controls smooth scrolling to messages, utilizing ChatGPT's native buttons (primary) or direct DOM `scrollIntoView` (fallback).
   - [tooltip.js](file:///Users/leo/🔥Projects/chrome-plugins/chat-toc/tooltip.js): Shows full-text preview tooltips for truncated prompt lines.
   - [toggleButton.js](file:///Users/leo/🔥Projects/chrome-plugins/chat-toc/toggleButton.js): Manages the floating circular toggle button and session-bound drag position.

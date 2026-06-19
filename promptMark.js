@@ -41,7 +41,7 @@
     markButton.type = 'button';
     markButton.innerHTML = `
       <svg aria-hidden="true" viewBox="0 0 24 24">
-        <path d="m12 3 2.78 5.63 6.22.9-4.5 4.39 1.06 6.2L12 17.2l-5.56 2.92 1.06-6.2L3 9.53l6.22-.9L12 3Z" />
+        <path d="M6 4.5A1.5 1.5 0 0 1 7.5 3h9A1.5 1.5 0 0 1 18 4.5v15a.75.75 0 0 1-1.2.6L12 16.5l-4.8 3.6a.75.75 0 0 1-1.2-.6v-15Z" />
       </svg>
     `;
 
