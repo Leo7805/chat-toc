@@ -620,6 +620,8 @@ function normalizeText(text) {
  * @param {number} index
  */
 function forceActiveNavigatorItem(index) {
+  const activeIndexChanged = index !== activeNavigatorIndex;
+
   activeNavigatorIndex = index;
 
   navigatorItems.forEach((item) => {
@@ -631,6 +633,10 @@ function forceActiveNavigatorItem(index) {
   if (!item) return;
 
   item.classList.add('navigator-item-active');
+
+  if (activeIndexChanged) {
+    window.ChatTocOutline?.syncActivePrompt?.(index);
+  }
 
   scrollNavigatorItemIntoView(item);
 }

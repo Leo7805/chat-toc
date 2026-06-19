@@ -117,13 +117,35 @@
       };
     }
 
-    currentPromptIndex = index;
-    collapseAllExcept(index);
-    updateAllPromptItems();
+    setCurrentPrompt(index);
 
     return {
       shouldBuild: true,
     };
+  }
+
+  /**
+   * Syncs outline UI when ChatTOC's active prompt changes outside a prompt-row
+   * click, such as native/chat scroll activation.
+   * @param {number} index Active prompt index.
+   */
+  function syncActivePrompt(index) {
+    if (index === currentPromptIndex) return;
+
+    outlineJumpVersion += 1;
+    clearHighlightedHeading();
+    setCurrentPrompt(index);
+  }
+
+  /**
+   * Makes a prompt the current outline owner and hides non-favorite outlines
+   * from other prompts.
+   * @param {number} index Prompt index.
+   */
+  function setCurrentPrompt(index) {
+    currentPromptIndex = index;
+    collapseAllExcept(index);
+    updateAllPromptItems();
   }
 
   /**
@@ -625,6 +647,7 @@
     resetPromptItems,
     scheduleBuild,
     setPromptMessages,
+    syncActivePrompt,
     syncFavoriteState,
   };
 
