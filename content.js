@@ -9,6 +9,7 @@ let currentConversationKey = null;
 let pendingNewChatRouteKey = null;
 let pendingNewChatMessage = null;
 let activeNavigatorIndex = null;
+let viewMode = 'toc'; // 'toc' or 'favorites'
 
 /* Use to highlight current prompt*/
 let navigatorItems = [];
@@ -107,13 +108,14 @@ async function createSidebar() {
         </button>
         <button
           class="navigator-icon-btn navigator-header-icon-btn"
-          id="refresh-toc-btn"
+          id="search-toggle-btn"
           type="button"
-          aria-label="Refresh TOC"
+          aria-label="Toggle search"
+          title="Toggle search"
         >
-          <svg aria-hidden="true" viewBox="0 0 24 24">
-            <path d="M20 6v5h-5" />
-            <path d="M20 11a8 8 0 1 0-2.34 5.66" />
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
         </button>
       </div>
@@ -136,6 +138,11 @@ async function createSidebar() {
           <path d="M6 5h12M12 19V9M7 14l5-5 5 5" />
         </svg>
       </button>
+      <button class="navigator-icon-btn" id="toggle-view-mode-btn" type="button" aria-label="Switch to Favorites" title="Switch to Favorites">
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+        </svg>
+      </button>
       <button class="navigator-icon-btn" id="jump-chat-bottom-btn" type="button" aria-label="Jump to bottom">
         <svg aria-hidden="true" viewBox="0 0 24 24">
           <path d="M6 19h12M12 5v10M7 10l5 5 5-5" />
@@ -151,8 +158,20 @@ async function createSidebar() {
   initNavigatorJump();
 
   document
-    .getElementById('refresh-toc-btn')
-    .addEventListener('click', reloadCurrentPageData);
+    .getElementById('search-toggle-btn')
+    .addEventListener('click', () => {
+      const searchInput = document.getElementById('navigator-search');
+      if (!searchInput) return;
+      const isHidden = window.getComputedStyle(searchInput).display === 'none';
+      searchInput.style.display = isHidden ? 'block' : 'none';
+      if (isHidden) {
+        searchInput.focus();
+      } else {
+        searchInput.value = '';
+        navigatorSearchQuery = '';
+        buildNavigator();
+      }
+    });
   document
     .getElementById('navigator-title')
     .addEventListener('click', resetNavigatorView);
@@ -166,6 +185,9 @@ async function createSidebar() {
     .addEventListener('click', () =>
       window.ChatTocJump.jumpToConversationEdge('bottom')
     );
+  document
+    .getElementById('toggle-view-mode-btn')
+    .addEventListener('click', toggleViewMode);
 
   document
     .getElementById('navigator-search')
@@ -362,7 +384,7 @@ function setNavigatorTitle() {
 
   if (!title) return;
 
-  const nextTitle = getConversationTitle();
+  const nextTitle = viewMode === 'favorites' ? 'FAVORITES' : getConversationTitle();
 
   title.textContent = nextTitle;
   title.title = nextTitle;
@@ -492,6 +514,14 @@ function buildNavigator({ refreshObservers = false } = {}) {
 
   if (!list) return;
 
+  if (viewMode === 'favorites') {
+    if (hint) hint.hidden = true;
+    window.ChatTocFavorites.renderFavorites(list, navigatorSearchQuery, () => {
+      buildNavigator();
+    });
+    return;
+  }
+
   list.innerHTML = '';
   navigatorItems = []; // Reset navigator items for new build
   window.ChatTocOutline?.resetPromptItems?.();
@@ -560,6 +590,20 @@ function buildNavigator({ refreshObservers = false } = {}) {
       if (isTextTruncated(itemText) && item.matches(':hover')) {
         window.ChatTocTooltip.show(message.text, event, itemMain);
       }
+    });
+
+    item.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+      window.ChatTocFavorites.showDialog({
+        content: message.text,
+        title: message.text.slice(0, 30)
+      }, () => {
+        if (viewMode !== 'favorites') {
+          toggleViewMode();
+        } else {
+          buildNavigator();
+        }
+      });
     });
 
     itemMain.append(
@@ -992,6 +1036,37 @@ async function main() {
   window.ChatTocTooltip.init({
     anchorSelector: '#navigator-list',
   });
+
+  window.ChatTocFavorites.initAutocomplete();
+}
+
+/**
+ * Toggles the display mode between Conversation TOC and Favorites list.
+ */
+function toggleViewMode() {
+  const btn = document.getElementById('toggle-view-mode-btn');
+  if (!btn) return;
+
+  if (viewMode === 'toc') {
+    viewMode = 'favorites';
+    btn.classList.add('mode-favorites-active');
+    btn.setAttribute('aria-label', 'Switch to Table of Contents');
+    btn.title = 'Switch to Table of Contents';
+  } else {
+    viewMode = 'toc';
+    btn.classList.remove('mode-favorites-active');
+    btn.setAttribute('aria-label', 'Switch to Favorites');
+    btn.title = 'Switch to Favorites';
+  }
+
+  const searchInput = document.getElementById('navigator-search');
+  if (searchInput) {
+    searchInput.value = '';
+    navigatorSearchQuery = '';
+  }
+
+  setNavigatorTitle();
+  buildNavigator();
 }
 
 main();
