@@ -29,6 +29,7 @@
 
   installWideViewportMatchMediaSpoof();
   listenForWidthSpoofToggle();
+  installHistoryHook();
 
   const originalFetch = window.fetch.bind(window);
 
@@ -530,5 +531,40 @@
         );
       }
     } catch {}
+  }
+
+  /**
+   * Intercepts HTML5 History pushState and replaceState calls to notify the
+   * content script of SPA routing changes immediately.
+   */
+  function installHistoryHook() {
+    const originalPushState = window.history.pushState;
+    const originalReplaceState = window.history.replaceState;
+
+    if (typeof originalPushState === 'function') {
+      window.history.pushState = function (...args) {
+        originalPushState.apply(this, args);
+        notifyRouteChanged();
+      };
+    }
+
+    if (typeof originalReplaceState === 'function') {
+      window.history.replaceState = function (...args) {
+        originalReplaceState.apply(this, args);
+        notifyRouteChanged();
+      };
+    }
+  }
+
+  /**
+   * Sends a message to the content script indicating that navigation occurred.
+   */
+  function notifyRouteChanged() {
+    window.postMessage(
+      {
+        type: 'CHATGPT_ROUTE_CHANGED',
+      },
+      '*'
+    );
   }
 })();

@@ -468,8 +468,17 @@ function listenForRouteChanges() {
   currentConversationKey = getCurrentConversationKey();
   initMarkedPrompts();
 
-  // ChatGPT route changes do not always trigger a full page load.
-  setInterval(syncNavigatorRouteState, 250);
+  // Listen to browser backward/forward navigation
+  window.addEventListener('popstate', syncNavigatorRouteState);
+
+  // Listen to programmatic pushState/replaceState route transitions
+  window.addEventListener('message', (event) => {
+    if (event.source !== window) return;
+
+    if (event.data?.type === 'CHATGPT_ROUTE_CHANGED') {
+      syncNavigatorRouteState();
+    }
+  });
 }
 
 /**
