@@ -202,10 +202,10 @@ function initNavigatorJump() {
 }
 
 /**
- * Loads pin state for the current ChatGPT route.
+ * Loads favorite prompt state for the current ChatGPT route.
  */
-function initPinnedPrompts() {
-  window.ChatTocPin.init({
+function initFavoritePrompts() {
+  window.ChatTocPromptFavorite.init({
     conversationKey: getCurrentConversationKey(),
   });
 }
@@ -408,7 +408,7 @@ function resetNavigatorStateForCurrentRoute() {
   // ChatGPT is a SPA, so switching chats can keep this content script alive.
   // Clear per-conversation state when the route changes.
   conversationMessages = [];
-  initPinnedPrompts();
+  initFavoritePrompts();
   activeNavigatorIndex = null;
   window.ChatTocOutline?.reset?.();
   navigatorItems = [];
@@ -465,7 +465,7 @@ function syncNavigatorRouteState() {
  */
 function listenForRouteChanges() {
   currentConversationKey = getCurrentConversationKey();
-  initPinnedPrompts();
+  initFavoritePrompts();
 
   // ChatGPT route changes do not always trigger a full page load.
   setInterval(syncNavigatorRouteState, 250);
@@ -526,7 +526,7 @@ function buildNavigator({ refreshObservers = false } = {}) {
       item.classList.add('navigator-item-active');
     }
 
-    const pinButton = window.ChatTocPin.createButton({
+    const favoriteButton = window.ChatTocPromptFavorite.createButton({
       item,
       messageId: message.id,
     });
@@ -551,7 +551,7 @@ function buildNavigator({ refreshObservers = false } = {}) {
     itemMain.append(
       itemText,
       outlineControls?.outlineIndicator || document.createElement('span'),
-      pinButton
+      favoriteButton
     );
     item.append(itemMain);
 
@@ -955,7 +955,7 @@ function listenForConversationData() {
  */
 async function main() {
   injectFetchHook(); // Start intercepting conversation data
-  initPinnedPrompts();
+  initFavoritePrompts();
 
   listenForConversationData(); // Listen for data sent from the fetch hook
 

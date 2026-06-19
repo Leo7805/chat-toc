@@ -132,7 +132,7 @@
    */
   function collapseAllExcept(index) {
     expandedPromptOutlines.forEach((expandedIndex) => {
-      if (expandedIndex !== index && !isPromptPinned(expandedIndex)) {
+      if (expandedIndex !== index && !isPromptFavorite(expandedIndex)) {
         expandedPromptOutlines.delete(expandedIndex);
       }
     });
@@ -147,22 +147,24 @@
   }
 
   /**
-   * Reapplies expanded-outline rules after pinned state changes.
+   * Reapplies expanded-outline rules after favorite state changes.
    */
-  function syncPinnedState() {
+  function syncFavoriteState() {
     collapseAllExcept(currentPromptIndex);
     updateAllPromptItems();
   }
 
   /**
-   * Returns whether a prompt row is currently pinned.
+   * Returns whether a prompt row is currently favorited.
    * @param {number} index Prompt index.
    * @returns {boolean}
    */
-  function isPromptPinned(index) {
+  function isPromptFavorite(index) {
     const messageId = promptMessageIds.get(index);
 
-    return Boolean(messageId && window.ChatTocPin?.isPinned?.(messageId));
+    return Boolean(
+      messageId && window.ChatTocPromptFavorite?.isFavorite?.(messageId)
+    );
   }
 
   /**
@@ -427,10 +429,10 @@
   function updatePromptItemState(entry, index) {
     const outline = promptOutlines.get(index) || [];
     const isCurrent = index === currentPromptIndex;
-    const isPinnedExpanded =
-      expandedPromptOutlines.has(index) && isPromptPinned(index);
+    const isFavoriteExpanded =
+      expandedPromptOutlines.has(index) && isPromptFavorite(index);
     const hasVisibleOutline =
-      (isCurrent || isPinnedExpanded) && outline.length > 0;
+      (isCurrent || isFavoriteExpanded) && outline.length > 0;
     const isExpanded = expandedPromptOutlines.has(index) && hasVisibleOutline;
 
     entry.item.classList.toggle(
@@ -623,7 +625,7 @@
     resetPromptItems,
     scheduleBuild,
     setPromptMessages,
-    syncPinnedState,
+    syncFavoriteState,
   };
 
   window.ChatTocOutline = api;
