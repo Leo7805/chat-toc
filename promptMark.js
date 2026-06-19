@@ -95,12 +95,12 @@
   }
 
   /**
-   * Loads marked prompt IDs from localStorage.
+   * Loads marked prompt IDs from sessionStorage.
    * @returns {Set<string>}
    */
   function load() {
     try {
-      const rawValue = localStorage.getItem(getStorageKey());
+      const rawValue = sessionStorage.getItem(getStorageKey());
       const parsedValue = rawValue ? JSON.parse(rawValue) : [];
 
       return new Set(Array.isArray(parsedValue) ? parsedValue : []);
@@ -110,11 +110,11 @@
   }
 
   /**
-   * Persists marked prompt IDs to localStorage.
+   * Persists marked prompt IDs to sessionStorage.
    */
   function save() {
     try {
-      localStorage.setItem(
+      sessionStorage.setItem(
         getStorageKey(),
         JSON.stringify([...markedPromptIds])
       );
@@ -122,7 +122,7 @@
   }
 
   /**
-   * Returns the localStorage key for the active conversation.
+   * Returns the sessionStorage key for the active conversation.
    * @returns {string}
    */
   function getStorageKey() {

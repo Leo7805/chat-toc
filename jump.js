@@ -36,10 +36,20 @@
       return;
     }
 
-    window.scrollTo({
-      top: edge === 'top' ? 0 : document.documentElement.scrollHeight,
-      behavior: 'smooth',
-    });
+    const messages = Array.from(
+      document.querySelectorAll('[data-message-author-role="user"]')
+    );
+
+    if (messages.length > 0) {
+      const targetElement = edge === 'top' ? messages[0] : messages.at(-1);
+
+      if (targetElement) {
+        targetElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        });
+      }
+    }
   }
 
   /**

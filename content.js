@@ -130,7 +130,7 @@ async function createSidebar() {
       />
     </div>
 
-    <div class="navigator-action-rail">
+    <div class="navigator-jump-controls">
       <button class="navigator-icon-btn" id="jump-chat-top-btn" type="button" aria-label="Jump to top">
         <svg aria-hidden="true" viewBox="0 0 24 24">
           <path d="M6 5h12M12 19V9M7 14l5-5 5 5" />
@@ -409,6 +409,7 @@ function resetNavigatorStateForCurrentRoute() {
   // Clear per-conversation state when the route changes.
   conversationMessages = [];
   initMarkedPrompts();
+  window.ChatTocSidebarVisibility?.syncPageState?.();
   activeNavigatorIndex = null;
   window.ChatTocOutline?.reset?.();
   navigatorItems = [];
@@ -975,7 +976,9 @@ async function main() {
   listenForRouteChanges();
   initActivePromptTracking();
   const toggleBtn = window.ChatTocToggleButton.create();
-  window.ChatTocSidebarVisibility.init(sidebar, toggleBtn);
+  window.ChatTocSidebarVisibility.init(sidebar, toggleBtn, {
+    getPageKey: getCurrentConversationKey,
+  });
 
   window.ChatTocTooltip.init({
     anchorSelector: '#navigator-list',

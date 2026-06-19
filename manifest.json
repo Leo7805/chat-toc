@@ -18,7 +18,6 @@
       "48": "icons/icon48.png"
     }
   },
-  "permissions": ["storage"],
   "content_scripts": [
     {
       "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],

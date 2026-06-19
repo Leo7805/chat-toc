@@ -2,7 +2,7 @@
  * Owns ChatTOC sidebar visibility, pinning, and auto-hide behavior.
  */
 (function () {
-  const PINNED_STORAGE_KEY = 'chatTocSidebarPinned';
+  const PINNED_STORAGE_PREFIX = 'chatTocSidebarPinned:';
   const WIDTH_SPOOF_MESSAGE_TYPE = 'CHATGPT_NAVIGATOR_SET_WIDTH_SPOOF';
   const AUTO_HIDE_DELAY_MS = 300;
 
@@ -12,28 +12,30 @@
   let isPinned = true;
   let isHidden = false;
   let hideTimer = 0;
+  let getPageKey = () => location.pathname;
 
   /**
    * @param {HTMLElement} sidebarElement
    * @param {HTMLButtonElement} toggleButton
+   * @param {Object} [options]
+   * @param {() => string} [options.getPageKey]
    */
-  function init(sidebarElement, toggleButton) {
+  function init(sidebarElement, toggleButton, options = {}) {
     sidebar = sidebarElement;
     toggleBtn = toggleButton;
     pinBtn = document.getElementById('sidebar-pin-btn');
+    getPageKey =
+      typeof options.getPageKey === 'function' ? options.getPageKey : getPageKey;
 
     bindPinButton();
     bindToggleButton();
     bindAutoHide();
-    setPinned(true, { persist: false });
+    loadPinnedState();
+    finishInitializing();
+  }
 
-    storageGet(PINNED_STORAGE_KEY, (savedPinned) => {
-      if (typeof savedPinned === 'boolean') {
-        setPinned(savedPinned, { persist: false });
-      }
-
-      finishInitializing();
-    });
+  function syncPageState() {
+    loadPinnedState();
   }
 
   function bindPinButton() {
@@ -94,12 +96,7 @@
     isPinned = pinned;
     clearHideTimer();
 
-    pinBtn?.classList.toggle('sidebar-pin-active', isPinned);
-    pinBtn?.setAttribute('aria-pressed', String(isPinned));
-    pinBtn?.setAttribute(
-      'aria-label',
-      isPinned ? 'Enable sidebar auto-hide' : 'Pin sidebar open'
-    );
+    updatePinButtonState();
 
     if (isPinned) {
       setHidden(false);
@@ -108,12 +105,39 @@
     }
 
     if (options.persist) {
-      storageSet(PINNED_STORAGE_KEY, isPinned);
+      storageSet(getPinnedStorageKey(), isPinned);
     }
+  }
+
+  function getPinnedStorageKey() {
+    return `${PINNED_STORAGE_PREFIX}${getPageKey()}`;
+  }
+
+  function loadPinnedState() {
+    const savedPinned = storageGet(getPinnedStorageKey());
+    const nextPinned = typeof savedPinned === 'boolean' ? savedPinned : true;
+
+    isPinned = nextPinned;
+    clearHideTimer();
+    updatePinButtonState();
+    setHidden(isPinned ? false : true);
+  }
+
+  function updatePinButtonState() {
+    pinBtn?.classList.toggle('sidebar-pin-active', isPinned);
+    pinBtn?.setAttribute('aria-pressed', String(isPinned));
+    pinBtn?.setAttribute(
+      'aria-label',
+      isPinned ? 'Enable sidebar auto-hide' : 'Pin sidebar open'
+    );
   }
 
   function finishInitializing() {
     sidebar?.classList.remove('navigator-initializing');
+
+    window.requestAnimationFrame(() => {
+      sidebar?.classList.add('navigator-ready');
+    });
   }
 
   /**
@@ -163,28 +187,26 @@
     );
   }
 
-  function storageGet(key, callback) {
-    if (typeof chrome === 'undefined' || !chrome.storage?.local) {
-      callback(null);
-      return;
-    }
+  function storageGet(key) {
+    try {
+      const rawValue = sessionStorage.getItem(key);
 
-    chrome.storage.local.get([key], (result) => {
-      callback(result?.[key] ?? null);
-    });
+      return rawValue ? JSON.parse(rawValue) : null;
+    } catch {
+      return null;
+    }
   }
 
   function storageSet(key, value) {
-    if (typeof chrome === 'undefined' || !chrome.storage?.local) return;
-
-    chrome.storage.local.set({
-      [key]: value,
-    });
+    try {
+      sessionStorage.setItem(key, JSON.stringify(value));
+    } catch {}
   }
 
   window.ChatTocSidebarVisibility = {
     init,
     setHidden,
     setPinned,
+    syncPageState,
   };
 })();
