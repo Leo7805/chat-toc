@@ -202,10 +202,10 @@ function initNavigatorJump() {
 }
 
 /**
- * Loads favorite prompt state for the current ChatGPT route.
+ * Loads marked prompt state for the current ChatGPT route.
  */
-function initFavoritePrompts() {
-  window.ChatTocPromptFavorite.init({
+function initMarkedPrompts() {
+  window.ChatTocPromptMark.init({
     conversationKey: getCurrentConversationKey(),
   });
 }
@@ -408,7 +408,7 @@ function resetNavigatorStateForCurrentRoute() {
   // ChatGPT is a SPA, so switching chats can keep this content script alive.
   // Clear per-conversation state when the route changes.
   conversationMessages = [];
-  initFavoritePrompts();
+  initMarkedPrompts();
   activeNavigatorIndex = null;
   window.ChatTocOutline?.reset?.();
   navigatorItems = [];
@@ -465,7 +465,7 @@ function syncNavigatorRouteState() {
  */
 function listenForRouteChanges() {
   currentConversationKey = getCurrentConversationKey();
-  initFavoritePrompts();
+  initMarkedPrompts();
 
   // ChatGPT route changes do not always trigger a full page load.
   setInterval(syncNavigatorRouteState, 250);
@@ -526,7 +526,7 @@ function buildNavigator({ refreshObservers = false } = {}) {
       item.classList.add('navigator-item-active');
     }
 
-    const favoriteButton = window.ChatTocPromptFavorite.createButton({
+    const markButton = window.ChatTocPromptMark.createButton({
       item,
       messageId: message.id,
     });
@@ -544,14 +544,18 @@ function buildNavigator({ refreshObservers = false } = {}) {
 
     navigatorItems[index] = item;
 
-    item.addEventListener('click', () => {
+    item.addEventListener('click', (event) => {
       handleNavigatorItemClick(message, index);
+
+      if (isTextTruncated(itemText) && item.matches(':hover')) {
+        window.ChatTocTooltip.show(message.text, event, itemMain);
+      }
     });
 
     itemMain.append(
       itemText,
       outlineControls?.outlineIndicator || document.createElement('span'),
-      favoriteButton
+      markButton
     );
     item.append(itemMain);
 
@@ -563,7 +567,7 @@ function buildNavigator({ refreshObservers = false } = {}) {
 
     item.addEventListener('mouseenter', (event) => {
       if (isTextTruncated(itemText)) {
-        window.ChatTocTooltip.show(message.text, event);
+        window.ChatTocTooltip.show(message.text, event, itemMain);
       }
     });
 
@@ -961,7 +965,7 @@ function listenForConversationData() {
  */
 async function main() {
   injectFetchHook(); // Start intercepting conversation data
-  initFavoritePrompts();
+  initMarkedPrompts();
 
   listenForConversationData(); // Listen for data sent from the fetch hook
 

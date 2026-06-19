@@ -330,12 +330,12 @@
   background: rgba(55, 65, 81, 0.64);
 }
 
-.navigator-item.navigator-item-favorite {
+.navigator-item.navigator-item-marked {
   background: rgba(234, 179, 8, 0.12);
   color: #fde68a;
 }
 
-.navigator-item.navigator-item-active.navigator-item-favorite {
+.navigator-item.navigator-item-active.navigator-item-marked {
   background: #1f3b73;
   box-shadow: inset 3px 0 0 #facc15;
   color: white;
@@ -383,7 +383,7 @@
     box-shadow 160ms ease;
 }
 
-.navigator-favorite-btn {
+.navigator-mark-btn {
   flex: 0 0 18px;
   width: 18px;
   height: 18px;
@@ -401,18 +401,18 @@
     opacity 120ms ease;
 }
 
-.navigator-item:hover .navigator-favorite-btn,
-.navigator-favorite-btn:focus-visible,
-.navigator-favorite-btn.navigator-favorite-btn-active {
+.navigator-item:hover .navigator-mark-btn,
+.navigator-mark-btn:focus-visible,
+.navigator-mark-btn.navigator-mark-btn-active {
   opacity: 1;
 }
 
-.navigator-favorite-btn:hover,
-.navigator-favorite-btn.navigator-favorite-btn-active {
+.navigator-mark-btn:hover,
+.navigator-mark-btn.navigator-mark-btn-active {
   color: #facc15;
 }
 
-.navigator-favorite-btn svg {
+.navigator-mark-btn svg {
   width: 14px;
   height: 14px;
   fill: none;
@@ -422,7 +422,7 @@
   stroke-width: 1.8;
 }
 
-.navigator-favorite-btn.navigator-favorite-btn-active svg {
+.navigator-mark-btn.navigator-mark-btn-active svg {
   fill: currentColor;
 }
 

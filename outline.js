@@ -138,7 +138,7 @@
   }
 
   /**
-   * Makes a prompt the current outline owner and hides non-favorite outlines
+   * Makes a prompt the current outline owner and hides unmarked outlines
    * from other prompts.
    * @param {number} index Prompt index.
    */
@@ -154,7 +154,7 @@
    */
   function collapseAllExcept(index) {
     expandedPromptOutlines.forEach((expandedIndex) => {
-      if (expandedIndex !== index && !isPromptFavorite(expandedIndex)) {
+      if (expandedIndex !== index && !isPromptMarked(expandedIndex)) {
         expandedPromptOutlines.delete(expandedIndex);
       }
     });
@@ -169,23 +169,23 @@
   }
 
   /**
-   * Reapplies expanded-outline rules after favorite state changes.
+   * Reapplies expanded-outline rules after mark state changes.
    */
-  function syncFavoriteState() {
+  function syncMarkState() {
     collapseAllExcept(currentPromptIndex);
     updateAllPromptItems();
   }
 
   /**
-   * Returns whether a prompt row is currently favorited.
+   * Returns whether a prompt row is currently marked.
    * @param {number} index Prompt index.
    * @returns {boolean}
    */
-  function isPromptFavorite(index) {
+  function isPromptMarked(index) {
     const messageId = promptMessageIds.get(index);
 
     return Boolean(
-      messageId && window.ChatTocPromptFavorite?.isFavorite?.(messageId)
+      messageId && window.ChatTocPromptMark?.isMarked?.(messageId)
     );
   }
 
@@ -451,10 +451,10 @@
   function updatePromptItemState(entry, index) {
     const outline = promptOutlines.get(index) || [];
     const isCurrent = index === currentPromptIndex;
-    const isFavoriteExpanded =
-      expandedPromptOutlines.has(index) && isPromptFavorite(index);
+    const isMarkExpanded =
+      expandedPromptOutlines.has(index) && isPromptMarked(index);
     const hasVisibleOutline =
-      (isCurrent || isFavoriteExpanded) && outline.length > 0;
+      (isCurrent || isMarkExpanded) && outline.length > 0;
     const isExpanded = expandedPromptOutlines.has(index) && hasVisibleOutline;
 
     entry.item.classList.toggle(
@@ -648,7 +648,7 @@
     scheduleBuild,
     setPromptMessages,
     syncActivePrompt,
-    syncFavoriteState,
+    syncMarkState,
   };
 
   window.ChatTocOutline = api;

@@ -26,7 +26,7 @@
         "outline.js",
         "follow.js",
         "message.js",
-        "promptFavorite.js",
+        "promptMark.js",
         "jump.js",
         "tooltip.js",
         "toggleButton.js",

@@ -51,8 +51,9 @@
    * Shows a tooltip with the full prompt text near the hovered row.
    * @param {string} text
    * @param {MouseEvent} event
+   * @param {HTMLElement} [anchorElement] Element whose top edge anchors the tooltip vertically.
    */
-  function show(text, event) {
+  function show(text, event, anchorElement) {
     const tooltip = getTooltip();
 
     if (!tooltip) return;
@@ -70,7 +71,7 @@
     showTimer = setTimeout(() => {
       tooltip.textContent = text;
       tooltip.classList.add('visible');
-      positionTooltip(tooltip, clientX, clientY);
+      positionTooltip(tooltip, clientX, clientY, anchorElement);
     }, SHOW_DELAY_MS);
   }
 
@@ -98,19 +99,23 @@
    * @param {HTMLElement} tooltip
    * @param {number} clientX
    * @param {number} clientY
+   * @param {HTMLElement} [anchorElement]
    */
-  function positionTooltip(tooltip, clientX, clientY) {
+  function positionTooltip(tooltip, clientX, clientY, anchorElement) {
     const gap = 8;
     const margin = 16;
     const anchor = anchorSelector ? document.querySelector(anchorSelector) : null;
     const anchorRect = anchor?.getBoundingClientRect();
+    const tooltipAnchorRect = anchorElement?.getBoundingClientRect();
 
-    let y = clientY + 15;
+    let y = tooltipAnchorRect ? tooltipAnchorRect.top + 4 : clientY + 15;
 
     const rect = tooltip.getBoundingClientRect();
     const x = anchorRect
       ? Math.max(margin, anchorRect.left - rect.width - gap)
       : Math.max(margin, clientX - rect.width - gap);
+
+    y = Math.max(margin, y);
 
     if (y + rect.height > window.innerHeight) {
       y = window.innerHeight - rect.height - margin;
