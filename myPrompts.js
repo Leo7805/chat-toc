@@ -334,8 +334,10 @@
       });
 
       row.addEventListener('mouseenter', (event) => {
-        const tooltipText = `${item.title}\n───────────────────────────────────\n${item.content}`;
-        window.ChatTocPreviewTooltip.show(tooltipText, event, rowMain);
+        window.ChatTocPreviewTooltip.show({
+          title: item.title,
+          content: item.content
+        }, event, rowMain);
       });
 
       row.addEventListener('mouseleave', () => {

@@ -70,7 +70,24 @@
     const clientY = event.clientY;
 
     showTimer = setTimeout(() => {
-      tooltip.textContent = text;
+      tooltip.innerHTML = '';
+      if (typeof text === 'object' && text !== null) {
+        const titleEl = document.createElement('div');
+        titleEl.className = 'navigator-preview-tooltip-title';
+        titleEl.textContent = text.title;
+
+        const contentEl = document.createElement('div');
+        contentEl.className = 'navigator-preview-tooltip-content';
+        contentEl.textContent = text.content;
+
+        tooltip.appendChild(titleEl);
+        tooltip.appendChild(contentEl);
+      } else {
+        const contentEl = document.createElement('div');
+        contentEl.className = 'navigator-preview-tooltip-content';
+        contentEl.textContent = text;
+        tooltip.appendChild(contentEl);
+      }
       tooltip.classList.add('visible');
       positionTooltip(tooltip, clientX, clientY, anchorElement);
     }, SHOW_DELAY_MS);
