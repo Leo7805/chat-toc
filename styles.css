@@ -44,23 +44,8 @@
   min-height: 0;
   overflow-y: auto;
   padding-bottom: 80vh;
-}
-
-#navigator-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-#navigator-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-#navigator-list::-webkit-scrollbar-thumb {
-  background: rgba(156, 163, 175, 0.25);
-  border-radius: 9999px;
-}
-
-#navigator-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(156, 163, 175, 0.45);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.25) transparent;
 }
 
 .navigator-header {

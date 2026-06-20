@@ -397,6 +397,7 @@ function reloadCurrentPageData() {
   location.reload();
 }
 
+
 /**
  * Restores the sidebar list to its default browsing state without changing the
  * active ChatGPT scroll position.
