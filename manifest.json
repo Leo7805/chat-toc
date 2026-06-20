@@ -31,7 +31,7 @@
         "tooltip.js",
         "toggleButton.js",
         "sidebarVisibility.js",
-        "favorites.js",
+        "myPrompts.js",
         "content.js"
       ],
       "css": ["styles.css"],

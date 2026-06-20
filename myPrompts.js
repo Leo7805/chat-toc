@@ -1,46 +1,55 @@
 /**
- * Manages ChatTOC Favorites, including local storage persistence,
- * CRUD modal dialogs, Favorites list rendering, and input autocompletion.
+ * Manages ChatTOC My Prompts, including local storage persistence,
+ * CRUD modal dialogs, Prompts list rendering, and input autocompletion.
  */
 (function () {
   let activeSort = 'updated_desc';
   let autocompleteMenu = null;
   let selectedMenuIndex = 0;
-  let filteredFavoritesForMenu = [];
+  let filteredPromptsForMenu = [];
   let currentTextarea = null;
 
+  // Migrate storage from chatToc:favorites to chatToc:myPrompts on startup
+  chrome.storage.local.get(['chatToc:favorites', 'chatToc:myPrompts'], (result) => {
+    if (result['chatToc:favorites'] && !result['chatToc:myPrompts']) {
+      chrome.storage.local.set({ 'chatToc:myPrompts': result['chatToc:favorites'] }, () => {
+        chrome.storage.local.remove('chatToc:favorites');
+      });
+    }
+  });
+
   /**
-   * Retrieves favorites from chrome.storage.local.
+   * Retrieves prompts from chrome.storage.local.
    * @returns {Promise<Array>}
    */
-  async function getFavorites() {
+  async function getMyPrompts() {
     return new Promise((resolve) => {
-      chrome.storage.local.get(['chatToc:favorites'], (result) => {
-        resolve(result['chatToc:favorites'] || []);
+      chrome.storage.local.get(['chatToc:myPrompts'], (result) => {
+        resolve(result['chatToc:myPrompts'] || []);
       });
     });
   }
 
   /**
-   * Persists favorites to chrome.storage.local.
-   * @param {Array} favorites
+   * Persists prompts to chrome.storage.local.
+   * @param {Array} prompts
    * @returns {Promise<void>}
    */
-  async function saveFavorites(favorites) {
+  async function saveMyPrompts(prompts) {
     return new Promise((resolve) => {
-      chrome.storage.local.set({ 'chatToc:favorites': favorites }, () => {
+      chrome.storage.local.set({ 'chatToc:myPrompts': prompts }, () => {
         resolve();
       });
     });
   }
 
   /**
-   * Sorts the favorites list based on the chosen mode.
+   * Sorts the prompts list based on the chosen mode.
    * @param {Array} list
    * @param {string} sortMode
    * @returns {Array}
    */
-  function sortFavorites(list, sortMode) {
+  function sortMyPrompts(list, sortMode) {
     const sorted = [...list];
     if (sortMode === 'updated_desc') {
       sorted.sort((a, b) => b.updatedAt - a.updatedAt);
@@ -81,7 +90,7 @@
    */
   function createSortBar(onSortChange, onAddNew) {
     const bar = document.createElement('div');
-    bar.className = 'favorites-sort-bar';
+    bar.className = 'my-prompts-sort-bar';
     bar.innerHTML = `
       <div class="sort-bar-left">
         <svg class="sort-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -89,24 +98,24 @@
           <line x1="3" y1="12" x2="21" y2="12"></line>
           <line x1="3" y1="18" x2="18" y2="18"></line>
         </svg>
-        <select class="favorites-sort-select" id="fav-sort-select">
+        <select class="my-prompts-sort-select" id="myprompt-sort-select">
           <option value="updated_desc">Newest Modified</option>
           <option value="updated_asc">Oldest Modified</option>
           <option value="name_asc">Title (A-Z)</option>
           <option value="name_desc">Title (Z-A)</option>
         </select>
       </div>
-      <button id="favorites-add-new-btn" title="Create new prompt">+</button>
+      <button id="myprompt-add-new-btn">+</button>
     `;
 
-    const select = bar.querySelector('#fav-sort-select');
+    const select = bar.querySelector('#myprompt-sort-select');
     select.value = activeSort;
     select.addEventListener('change', (e) => {
       activeSort = e.target.value;
       onSortChange();
     });
 
-    const addBtn = bar.querySelector('#favorites-add-new-btn');
+    const addBtn = bar.querySelector('#myprompt-add-new-btn');
     addBtn.addEventListener('click', () => {
       onAddNew();
     });
@@ -115,16 +124,16 @@
   }
 
   /**
-   * Opens the Create/Edit dialog for a favorite item.
+   * Opens the Create/Edit dialog for a prompt item.
    * @param {Object|null} item The item to edit, or null to create a new one.
    * @param {() => void} onSave Callback triggered when a save succeeds.
    */
   function showDialog(item = null, onSave = () => {}) {
-    let modal = document.getElementById('chat-toc-fav-modal');
+    let modal = document.getElementById('chat-toc-myprompt-modal');
     if (!modal) {
       modal = document.createElement('div');
-      modal.id = 'chat-toc-fav-modal';
-      modal.className = 'fav-modal-overlay';
+      modal.id = 'chat-toc-myprompt-modal';
+      modal.className = 'myprompt-modal-overlay';
       document.body.appendChild(modal);
     }
 
@@ -133,31 +142,31 @@
     const contentText = item ? item.content : '';
 
     modal.innerHTML = `
-      <div class="fav-modal-content">
-        <h3 class="fav-modal-title">${isNew ? 'Create Favorite Prompt' : 'Edit Favorite Prompt'}</h3>
-        <form id="fav-modal-form">
-          <div class="fav-modal-field">
-            <label for="fav-form-title">Title</label>
-            <input type="text" id="fav-form-title" placeholder="e.g. Code Review Helper" value="${escapeHtml(titleText)}" required />
+      <div class="myprompt-modal-content">
+        <h3 class="myprompt-modal-title">${isNew ? 'Create Custom Prompt' : 'Edit Custom Prompt'}</h3>
+        <form id="myprompt-modal-form">
+          <div class="myprompt-modal-field">
+            <label for="myprompt-form-title">Title</label>
+            <input type="text" id="myprompt-form-title" placeholder="e.g. Code Review Helper" value="${escapeHtml(titleText)}" required />
           </div>
-          <div class="fav-modal-field">
-            <label for="fav-form-content">Prompt Content</label>
-            <textarea id="fav-form-content" placeholder="Type or paste your prompt content here..." required>${escapeHtml(contentText)}</textarea>
+          <div class="myprompt-modal-field">
+            <label for="myprompt-form-content">Prompt Content</label>
+            <textarea id="myprompt-form-content" placeholder="Type or paste your prompt content here..." required>${escapeHtml(contentText)}</textarea>
           </div>
-          <div class="fav-modal-actions">
-            <button type="button" id="fav-form-cancel" class="fav-btn fav-btn-secondary">Cancel</button>
-            <button type="submit" id="fav-form-submit" class="fav-btn fav-btn-primary">Save</button>
+          <div class="myprompt-modal-actions">
+            <button type="button" id="myprompt-form-cancel" class="myprompt-btn myprompt-btn-secondary">Cancel</button>
+            <button type="submit" id="myprompt-form-submit" class="myprompt-btn myprompt-btn-primary">Save</button>
           </div>
         </form>
       </div>
     `;
 
     modal.style.display = 'flex';
-    const form = modal.querySelector('#fav-modal-form');
-    const cancelBtn = modal.querySelector('#fav-form-cancel');
+    const form = modal.querySelector('#myprompt-modal-form');
+    const cancelBtn = modal.querySelector('#myprompt-form-cancel');
 
     // Focus the title input field
-    modal.querySelector('#fav-form-title').focus();
+    modal.querySelector('#myprompt-form-title').focus();
 
     const closeModal = () => {
       modal.style.display = 'none';
@@ -172,31 +181,31 @@
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const title = modal.querySelector('#fav-form-title').value.trim();
-      const content = modal.querySelector('#fav-form-content').value.trim();
+      const title = modal.querySelector('#myprompt-form-title').value.trim();
+      const content = modal.querySelector('#myprompt-form-content').value.trim();
 
       if (!title || !content) return;
 
-      const favorites = await getFavorites();
+      const prompts = await getMyPrompts();
       if (isNew) {
-        const newFav = {
-          id: 'fav-' + Date.now(),
+        const newPrompt = {
+          id: 'prompt-' + Date.now(),
           title,
           content,
           createdAt: Date.now(),
           updatedAt: Date.now(),
         };
-        favorites.push(newFav);
+        prompts.push(newPrompt);
       } else {
-        const index = favorites.findIndex((f) => f.id === item.id);
+        const index = prompts.findIndex((p) => p.id === item.id);
         if (index !== -1) {
-          favorites[index].title = title;
-          favorites[index].content = content;
-          favorites[index].updatedAt = Date.now();
+          prompts[index].title = title;
+          prompts[index].content = content;
+          prompts[index].updatedAt = Date.now();
         }
       }
 
-      await saveFavorites(favorites);
+      await saveMyPrompts(prompts);
       closeModal();
       onSave();
     });
@@ -223,12 +232,12 @@
   }
 
   /**
-   * Renders the entire favorites view inside a container.
+   * Renders the entire prompts view inside a container.
    * @param {HTMLElement} container
    * @param {string} searchQuery
    * @param {() => void} onRefresh
    */
-  async function renderFavorites(container, searchQuery = '', onRefresh = () => {}) {
+  async function renderMyPrompts(container, searchQuery = '', onRefresh = () => {}) {
     container.innerHTML = '';
 
     const sortBar = createSortBar(onRefresh, () => {
@@ -236,7 +245,7 @@
     });
     container.appendChild(sortBar);
 
-    let list = await getFavorites();
+    let list = await getMyPrompts();
 
     const query = searchQuery.trim().toLowerCase();
     if (query) {
@@ -247,39 +256,38 @@
       );
     }
 
-    list = sortFavorites(list, activeSort);
+    list = sortMyPrompts(list, activeSort);
 
     if (list.length === 0) {
       const emptyHint = document.createElement('p');
       emptyHint.className = 'navigator-hint';
       emptyHint.textContent = query
-        ? 'No matching favorites.'
-        : 'No favorites yet. Click + to add one, or right-click any prompt in the TOC list.';
+        ? 'No matching prompts.'
+        : 'No prompts saved yet. Click + to add one, or right-click any prompt in the TOC list.';
       container.appendChild(emptyHint);
       return;
     }
 
     const listContainer = document.createElement('div');
-    listContainer.className = 'favorites-items-container';
+    listContainer.className = 'my-prompts-items-container';
 
     list.forEach((item) => {
       const row = document.createElement('div');
-      row.className = 'navigator-item favorites-item-row';
-      row.dataset.favId = item.id;
+      row.className = 'navigator-item my-prompts-item-row';
+      row.dataset.promptId = item.id;
 
       const rowMain = document.createElement('div');
       rowMain.className = 'navigator-item-main';
 
       const rowText = document.createElement('span');
-      rowText.className = 'navigator-item-text favorites-item-title';
+      rowText.className = 'navigator-item-text my-prompts-item-title';
       rowText.textContent = item.title;
 
       const actions = document.createElement('div');
-      actions.className = 'favorites-item-actions';
+      actions.className = 'my-prompts-item-actions';
 
       const editBtn = document.createElement('button');
-      editBtn.className = 'fav-action-btn edit-fav-btn';
-      editBtn.title = 'Edit';
+      editBtn.className = 'myprompt-action-btn edit-myprompt-btn';
       editBtn.innerHTML = `
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -288,12 +296,12 @@
       `;
       editBtn.addEventListener('click', (e) => {
         e.stopPropagation();
+        window.ChatTocPreviewTooltip.hide();
         showDialog(item, onRefresh);
       });
 
       const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'fav-action-btn delete-fav-btn';
-      deleteBtn.title = 'Delete';
+      deleteBtn.className = 'myprompt-action-btn delete-myprompt-btn';
       deleteBtn.innerHTML = `
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="3 6 5 6 21 6"></polyline>
@@ -304,10 +312,11 @@
       `;
       deleteBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
+        window.ChatTocPreviewTooltip.hide();
         if (confirm(`Are you sure you want to delete "${item.title}"?`)) {
-          const favorites = await getFavorites();
-          const filtered = favorites.filter((f) => f.id !== item.id);
-          await saveFavorites(filtered);
+          const prompts = await getMyPrompts();
+          const filtered = prompts.filter((p) => p.id !== item.id);
+          await saveMyPrompts(filtered);
           onRefresh();
         }
       });
@@ -320,7 +329,17 @@
       row.appendChild(rowMain);
 
       row.addEventListener('click', () => {
+        window.ChatTocPreviewTooltip.hide();
         insertIntoChatGPTInput(item.content);
+      });
+
+      row.addEventListener('mouseenter', (event) => {
+        const tooltipText = `${item.title}\n───────────────────────────────────\n${item.content}`;
+        window.ChatTocPreviewTooltip.show(tooltipText, event, rowMain);
+      });
+
+      row.addEventListener('mouseleave', () => {
+        window.ChatTocPreviewTooltip.hide();
       });
 
       listContainer.appendChild(row);
@@ -393,30 +412,30 @@
     const words = textBeforeCursor.trim().split(/\s+/);
     const lastWord = words[words.length - 1] || '';
 
-    const favorites = await getFavorites();
+    const prompts = await getMyPrompts();
     let matches = [];
     let triggerText = '';
 
     if (doubleSlashMatch) {
       triggerText = doubleSlashMatch[0];
       const query = doubleSlashMatch[1].toLowerCase();
-      matches = favorites.filter(
-        (fav) =>
-          fav.title.toLowerCase().includes(query) ||
-          fav.content.toLowerCase().includes(query)
+      matches = prompts.filter(
+        (p) =>
+          p.title.toLowerCase().includes(query) ||
+          p.content.toLowerCase().includes(query)
       );
     } else if (hashMatch) {
       triggerText = hashMatch[0];
       const query = hashMatch[1].toLowerCase();
-      matches = favorites.filter(
-        (fav) =>
-          fav.title.toLowerCase().includes(query) ||
-          fav.content.toLowerCase().includes(query)
+      matches = prompts.filter(
+        (p) =>
+          p.title.toLowerCase().includes(query) ||
+          p.content.toLowerCase().includes(query)
       );
     } else if (lastWord.length >= 2 && !lastWord.includes('#') && !lastWord.includes('/')) {
       // Trigger fuzzy title match for typed words of length >= 2, ignoring words containing triggers
-      matches = favorites.filter((fav) =>
-        fav.title.toLowerCase().includes(lastWord.toLowerCase())
+      matches = prompts.filter((p) =>
+        p.title.toLowerCase().includes(lastWord.toLowerCase())
       );
       triggerText = lastWord;
     }
@@ -435,7 +454,7 @@
    * @param {string} triggerText
    */
   function showAutocompleteMenu(textarea, matches, triggerText) {
-    filteredFavoritesForMenu = matches;
+    filteredPromptsForMenu = matches;
     selectedMenuIndex = Math.min(selectedMenuIndex, matches.length - 1);
 
     if (!autocompleteMenu) {
@@ -462,7 +481,7 @@
     if (!autocompleteMenu) return;
 
     autocompleteMenu.innerHTML = '';
-    filteredFavoritesForMenu.forEach((fav, index) => {
+    filteredPromptsForMenu.forEach((p, index) => {
       const item = document.createElement('div');
       item.className = 'autocomplete-menu-item';
       if (index === selectedMenuIndex) {
@@ -470,14 +489,14 @@
       }
 
       item.innerHTML = `
-        <div class="autocomplete-item-title">${escapeHtml(fav.title)}</div>
+        <div class="autocomplete-item-title">${escapeHtml(p.title)}</div>
         <div class="autocomplete-item-preview">${escapeHtml(
-          fav.content.slice(0, 80)
-        )}${fav.content.length > 80 ? '...' : ''}</div>
+          p.content.slice(0, 80)
+        )}${p.content.length > 80 ? '...' : ''}</div>
       `;
 
       item.addEventListener('click', () => {
-        selectAutocompleteItem(fav);
+        selectAutocompleteItem(p);
       });
 
       autocompleteMenu.appendChild(item);
@@ -485,11 +504,11 @@
   }
 
   /**
-   * Inserts the selected favorite content into the input element, replacing the trigger text.
+   * Inserts the selected prompt content into the input element, replacing the trigger text.
    * Handles both TEXTAREA and contenteditable containers cleanly.
-   * @param {Object} fav
+   * @param {Object} p
    */
-  function selectAutocompleteItem(fav) {
+  function selectAutocompleteItem(p) {
     if (!currentTextarea || !autocompleteMenu) return;
 
     const textarea = currentTextarea;
@@ -505,9 +524,9 @@
       if (triggerIndex !== -1) {
         const newTextBeforeCursor = textBeforeCursor.slice(0, triggerIndex);
         textarea.focus();
-        textarea.value = newTextBeforeCursor + fav.content + textAfterCursor;
+        textarea.value = newTextBeforeCursor + p.content + textAfterCursor;
         textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        const newCursorPos = triggerIndex + fav.content.length;
+        const newCursorPos = triggerIndex + p.content.length;
         textarea.setSelectionRange(newCursorPos, newCursorPos);
       }
     } else {
@@ -544,12 +563,12 @@
             selection.removeAllRanges();
             selection.addRange(replaceRange);
 
-            // Replace selection with favorite content
-            document.execCommand('insertText', false, fav.content);
+            // Replace selection with prompt content
+            document.execCommand('insertText', false, p.content);
           }
         } else {
           // Direct fallback insertion at current cursor
-          document.execCommand('insertText', false, fav.content);
+          document.execCommand('insertText', false, p.content);
         }
       }
     }
@@ -567,23 +586,23 @@
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       e.stopPropagation();
-      selectedMenuIndex = (selectedMenuIndex + 1) % filteredFavoritesForMenu.length;
+      selectedMenuIndex = (selectedMenuIndex + 1) % filteredPromptsForMenu.length;
       renderAutocompleteMenuContent();
       scrollActiveAutocompleteItemIntoView();
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       e.stopPropagation();
       selectedMenuIndex =
-        (selectedMenuIndex - 1 + filteredFavoritesForMenu.length) %
-        filteredFavoritesForMenu.length;
+        (selectedMenuIndex - 1 + filteredPromptsForMenu.length) %
+        filteredPromptsForMenu.length;
       renderAutocompleteMenuContent();
       scrollActiveAutocompleteItemIntoView();
     } else if (e.key === 'Enter' || e.key === 'Tab') {
       e.preventDefault();
       e.stopPropagation();
-      const selectedFav = filteredFavoritesForMenu[selectedMenuIndex];
-      if (selectedFav) {
-        selectAutocompleteItem(selectedFav);
+      const selectedPrompt = filteredPromptsForMenu[selectedMenuIndex];
+      if (selectedPrompt) {
+        selectAutocompleteItem(selectedPrompt);
       }
     } else if (e.key === 'Escape') {
       e.preventDefault();
@@ -608,17 +627,17 @@
   function closeAutocompleteMenu() {
     if (autocompleteMenu) {
       autocompleteMenu.style.display = 'none';
-      filteredFavoritesForMenu = [];
+      filteredPromptsForMenu = [];
       selectedMenuIndex = 0;
     }
   }
 
   // Export module API to window scope
-  window.ChatTocFavorites = {
-    getFavorites,
-    saveFavorites,
+  window.ChatTocMyPrompts = {
+    getMyPrompts,
+    saveMyPrompts,
     showDialog,
-    renderFavorites,
+    renderMyPrompts,
     initAutocomplete,
     insertIntoChatGPTInput,
   };

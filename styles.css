@@ -444,7 +444,7 @@
   fill: currentColor;
 }
 
-#navigator-tooltip {
+#navigator-preview-tooltip {
   position: fixed;
   right: 320px;
   top: 80px;
@@ -472,8 +472,31 @@
   display: none;
 }
 
-#navigator-tooltip.visible {
+#navigator-preview-tooltip.visible {
   display: block;
+}
+
+/* Button & Icon general tooltip widget */
+#navigator-button-tooltip {
+  position: fixed;
+  background: #000000;
+  color: #ffffff;
+  padding: 5px 9px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  z-index: 10000002;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 100ms ease;
+  display: none;
+}
+
+#navigator-button-tooltip.visible {
+  display: block;
+  opacity: 1;
 }
 
 .navigator-item.navigator-item-active {
@@ -514,16 +537,16 @@
   line-height: 1.4;
 }
 
-/* Favorites Styling */
-#toggle-view-mode-btn.mode-favorites-active {
+/* My Prompts Styling */
+#toggle-view-mode-btn.mode-myprompts-active {
   color: #3b82f6;
 }
 
-#toggle-view-mode-btn.mode-favorites-active svg {
+#toggle-view-mode-btn.mode-myprompts-active svg {
   fill: currentColor;
 }
 
-.favorites-sort-bar {
+.my-prompts-sort-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -545,7 +568,7 @@
   color: #9ca3af;
 }
 
-.favorites-sort-select {
+.my-prompts-sort-select {
   background: #1e293b;
   color: #cbd5e1;
   border: 1px solid #334155;
@@ -557,17 +580,17 @@
   transition: border-color 150ms ease, color 150ms ease;
 }
 
-.favorites-sort-select:hover {
+.my-prompts-sort-select:hover {
   border-color: #475569;
   color: #f1f5f9;
 }
 
-.favorites-sort-select:focus {
+.my-prompts-sort-select:focus {
   border-color: #60a5fa;
   color: #f1f5f9;
 }
 
-#favorites-add-new-btn {
+#myprompt-add-new-btn {
   background: #1e293b;
   border: 1px solid #334155;
   color: #3b82f6;
@@ -585,22 +608,22 @@
   transition: all 150ms ease;
 }
 
-#favorites-add-new-btn:hover {
+#myprompt-add-new-btn:hover {
   background: rgba(59, 130, 246, 0.12);
   border-color: #3b82f6;
   color: #60a5fa;
 }
 
-#favorites-add-new-btn:active {
+#myprompt-add-new-btn:active {
   transform: scale(0.95);
 }
 
-/* Favorites Item Actions */
-.favorites-item-row {
+/* My Prompts Item Actions */
+.my-prompts-item-row {
   position: relative;
 }
 
-.favorites-item-actions {
+.my-prompts-item-actions {
   display: flex;
   gap: 4px;
   opacity: 0;
@@ -608,11 +631,11 @@
   margin-left: auto;
 }
 
-.favorites-item-row:hover .favorites-item-actions {
+.my-prompts-item-row:hover .my-prompts-item-actions {
   opacity: 1;
 }
 
-.fav-action-btn {
+.myprompt-action-btn {
   background: transparent;
   border: none;
   padding: 2px;
@@ -625,23 +648,23 @@
   transition: color 120ms ease, background-color 120ms ease;
 }
 
-.fav-action-btn svg {
+.myprompt-action-btn svg {
   width: 14px;
   height: 14px;
 }
 
-.edit-fav-btn:hover {
+.edit-myprompt-btn:hover {
   color: #60a5fa;
   background-color: rgba(96, 165, 250, 0.12);
 }
 
-.delete-fav-btn:hover {
+.delete-myprompt-btn:hover {
   color: #ef4444;
   background-color: rgba(239, 68, 68, 0.12);
 }
 
 /* Modal Dialog */
-.fav-modal-overlay {
+.myprompt-modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -655,7 +678,7 @@
   align-items: center;
 }
 
-.fav-modal-content {
+.myprompt-modal-content {
   background: rgba(17, 24, 39, 0.85);
   backdrop-filter: blur(16px);
   border: 1px solid #374151;
@@ -667,7 +690,7 @@
   color: #e2e8f0;
 }
 
-.fav-modal-title {
+.myprompt-modal-title {
   margin: 0 0 20px;
   font-size: 18px;
   font-weight: 600;
@@ -676,14 +699,14 @@
   padding-bottom: 10px;
 }
 
-.fav-modal-field {
+.myprompt-modal-field {
   margin-bottom: 16px;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.fav-modal-field label {
+.myprompt-modal-field label {
   font-size: 12px;
   font-weight: 500;
   color: #94a3b8;
@@ -691,8 +714,8 @@
   letter-spacing: 0.05em;
 }
 
-.fav-modal-field input,
-.fav-modal-field textarea {
+.myprompt-modal-field input,
+.myprompt-modal-field textarea {
   background: #090d16;
   border: 1px solid #374151;
   border-radius: 6px;
@@ -704,25 +727,25 @@
   transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
-.fav-modal-field textarea {
+.myprompt-modal-field textarea {
   min-height: 120px;
   resize: vertical;
 }
 
-.fav-modal-field input:focus,
-.fav-modal-field textarea:focus {
+.myprompt-modal-field input:focus,
+.myprompt-modal-field textarea:focus {
   border-color: #60a5fa;
   box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.15);
 }
 
-.fav-modal-actions {
+.myprompt-modal-actions {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
   margin-top: 24px;
 }
 
-.fav-btn {
+.myprompt-btn {
   padding: 8px 16px;
   font-size: 13px;
   font-weight: 500;
@@ -733,25 +756,25 @@
   outline: none;
 }
 
-.fav-btn-secondary {
+.myprompt-btn-secondary {
   background: #374151;
   color: #e2e8f0;
 }
 
-.fav-btn-secondary:hover {
+.myprompt-btn-secondary:hover {
   background: #4b5563;
 }
 
-.fav-btn-primary {
+.myprompt-btn-primary {
   background: #2563eb;
   color: white;
 }
 
-.fav-btn-primary:hover {
+.myprompt-btn-primary:hover {
   background: #1d4ed8;
 }
 
-.fav-btn:active {
+.myprompt-btn:active {
   transform: scale(0.97);
 }
 
