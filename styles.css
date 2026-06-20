@@ -315,7 +315,7 @@
 .navigator-item-main {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   width: 100%;
   box-sizing: border-box;
   min-width: 0;
@@ -341,6 +341,10 @@
   height: 18px;
   display: grid;
   place-items: center;
+}
+
+.navigator-outline-indicator:empty {
+  display: none;
 }
 
 .navigator-outline-indicator svg {
