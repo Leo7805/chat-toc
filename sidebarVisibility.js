@@ -68,6 +68,9 @@
     toggleBtn.addEventListener('pointerenter', handleAutoHideEnter);
     sidebar.addEventListener('pointerleave', scheduleAutoHide);
     toggleBtn.addEventListener('pointerleave', scheduleAutoHide);
+
+    document.addEventListener('pointerover', handleDocumentPointerOver, true);
+    document.addEventListener('pointerout', handleDocumentPointerOut, true);
   }
 
   function handleAutoHideEnter() {
@@ -82,7 +85,13 @@
 
     clearHideTimer();
     hideTimer = window.setTimeout(() => {
-      if (isPointerInside(sidebar) || isPointerInside(toggleBtn)) return;
+      if (
+        isPointerInside(sidebar) ||
+        isPointerInside(toggleBtn) ||
+        isPointerInsidePreviewTooltip()
+      ) {
+        return;
+      }
 
       setHidden(true);
     }, AUTO_HIDE_DELAY_MS);
@@ -100,7 +109,11 @@
 
     if (isPinned) {
       setHidden(false);
-    } else if (!isPointerInside(sidebar) && !isPointerInside(toggleBtn)) {
+    } else if (
+      !isPointerInside(sidebar) &&
+      !isPointerInside(toggleBtn) &&
+      !isPointerInsidePreviewTooltip()
+    ) {
       setHidden(true);
     }
 
@@ -171,6 +184,33 @@
     if (!element) return false;
 
     return element.matches(':hover');
+  }
+
+  function isPointerInsidePreviewTooltip() {
+    const tooltip = document.getElementById('navigator-preview-tooltip');
+    return !!tooltip && tooltip.classList.contains('visible') && tooltip.matches(':hover');
+  }
+
+  function handleDocumentPointerOver(event) {
+    if (!isTooltipEvent(event)) return;
+
+    if (isPinned) return;
+
+    clearHideTimer();
+    setHidden(false);
+  }
+
+  function handleDocumentPointerOut(event) {
+    if (!isTooltipEvent(event)) return;
+
+    scheduleAutoHide();
+  }
+
+  function isTooltipEvent(event) {
+    const target = event.target;
+    if (!(target instanceof Element)) return false;
+
+    return !!target.closest('#navigator-preview-tooltip');
   }
 
   /**

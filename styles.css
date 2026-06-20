@@ -611,7 +611,9 @@
   font-size: 11px;
   outline: none;
   cursor: pointer;
-  transition: border-color 150ms ease, color 150ms ease;
+  transition:
+    border-color 150ms ease,
+    color 150ms ease;
 }
 
 .my-prompts-sort-select:hover {
@@ -679,7 +681,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: color 120ms ease, background-color 120ms ease;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
 }
 
 .myprompt-action-btn svg {
@@ -720,7 +724,9 @@
   width: 90%;
   max-width: 480px;
   padding: 24px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    0 20px 25px -5px rgba(0, 0, 0, 0.5),
+    0 10px 10px -5px rgba(0, 0, 0, 0.4);
   color: #e2e8f0;
 }
 
@@ -758,7 +764,9 @@
   font-size: 14px;
   outline: none;
   font-family: inherit;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
 }
 
 .myprompt-modal-field textarea {
@@ -785,7 +793,9 @@
   font-weight: 500;
   border-radius: 6px;
   cursor: pointer;
-  transition: background-color 120ms ease, transform 80ms ease;
+  transition:
+    background-color 120ms ease,
+    transform 80ms ease;
   border: none;
   outline: none;
 }
@@ -819,7 +829,9 @@
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid #334155;
   border-radius: 8px;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    0 10px 25px -5px rgba(0, 0, 0, 0.4),
+    0 8px 10px -6px rgba(0, 0, 0, 0.4);
   max-height: 220px;
   overflow-y: auto;
   z-index: 1000000;
