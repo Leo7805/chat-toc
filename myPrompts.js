@@ -9,76 +9,23 @@
   let filteredPromptsForMenu = [];
   let currentTextarea = null;
   let isProgrammaticInsert = false;
+  const promptsStore = window.ChatTocPromptStore.create();
 
   /**
-   * Helper to check if the extension context is still valid.
-   * @returns {boolean}
-   */
-  function isContextValid() {
-    return typeof chrome !== 'undefined' && !!chrome.runtime && !!chrome.runtime.id;
-  }
-
-  // Migrate storage from chatToc:favorites to chatToc:myPrompts on startup
-  try {
-    if (isContextValid()) {
-      chrome.storage.local.get(['chatToc:favorites', 'chatToc:myPrompts'], (result) => {
-        if (chrome.runtime.lastError) return;
-        if (result['chatToc:favorites'] && !result['chatToc:myPrompts']) {
-          chrome.storage.local.set({ 'chatToc:myPrompts': result['chatToc:favorites'] }, () => {
-            if (!chrome.runtime.lastError) {
-              chrome.storage.local.remove('chatToc:favorites');
-            }
-          });
-        }
-      });
-    }
-  } catch (e) {
-    // Context invalidated, ignore gracefully
-  }
-
-  /**
-   * Retrieves prompts from chrome.storage.local.
+   * Retrieves prompts from the prompt store.
    * @returns {Promise<Array>}
    */
   async function getMyPrompts() {
-    return new Promise((resolve) => {
-      try {
-        if (!isContextValid()) {
-          resolve([]);
-          return;
-        }
-        chrome.storage.local.get(['chatToc:myPrompts'], (result) => {
-          if (chrome.runtime.lastError) {
-            resolve([]);
-          } else {
-            resolve(result['chatToc:myPrompts'] || []);
-          }
-        });
-      } catch (e) {
-        resolve([]);
-      }
-    });
+    return promptsStore.getAll();
   }
 
   /**
-   * Persists prompts to chrome.storage.local.
+   * Persists prompts through the prompt store.
    * @param {Array} prompts
    * @returns {Promise<void>}
    */
   async function saveMyPrompts(prompts) {
-    return new Promise((resolve) => {
-      try {
-        if (!isContextValid()) {
-          resolve();
-          return;
-        }
-        chrome.storage.local.set({ 'chatToc:myPrompts': prompts }, () => {
-          resolve();
-        });
-      } catch (e) {
-        resolve();
-      }
-    });
+    return promptsStore.saveAll(prompts);
   }
 
   /**
@@ -176,7 +123,7 @@
     }
 
     const isNew = !item || !item.id;
-    const titleText = isNew ? (item?.title || '') : item.title;
+    const titleText = isNew ? item?.title || '' : item.title;
     const contentText = item ? item.content : '';
 
     modal.innerHTML = `
@@ -220,7 +167,9 @@
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const title = modal.querySelector('#myprompt-form-title').value.trim();
-      const content = modal.querySelector('#myprompt-form-content').value.trim();
+      const content = modal
+        .querySelector('#myprompt-form-content')
+        .value.trim();
 
       if (!title || !content) return;
 
@@ -281,7 +230,8 @@
           // Fallback
           textarea.value = currentVal + textToInsert;
           textarea.dispatchEvent(new Event('input', { bubbles: true }));
-          textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+          textarea.selectionStart = textarea.selectionEnd =
+            textarea.value.length;
         }
       } else {
         // For contenteditable div (ChatGPT's ProseMirror editor)
@@ -320,7 +270,10 @@
    */
   function placeCursorAtEnd(el) {
     el.focus();
-    if (typeof window.getSelection !== 'undefined' && typeof document.createRange !== 'undefined') {
+    if (
+      typeof window.getSelection !== 'undefined' &&
+      typeof document.createRange !== 'undefined'
+    ) {
       const range = document.createRange();
       range.selectNodeContents(el);
       range.collapse(false);
@@ -336,10 +289,16 @@
    * @param {string} searchQuery
    * @param {() => void} onRefresh
    */
-  async function renderMyPrompts(container, searchQuery = '', onRefresh = () => {}) {
+  async function renderMyPrompts(
+    container,
+    searchQuery = '',
+    onRefresh = () => {}
+  ) {
     container.innerHTML = '';
 
-    const toolbarContainer = document.getElementById('myprompts-toolbar-container');
+    const toolbarContainer = document.getElementById(
+      'myprompts-toolbar-container'
+    );
     if (toolbarContainer) {
       toolbarContainer.innerHTML = '';
       const sortBar = createSortBar(onRefresh, () => {
@@ -437,10 +396,14 @@
       });
 
       row.addEventListener('mouseenter', (event) => {
-        window.ChatTocPreviewTooltip.show({
-          title: item.title,
-          content: item.content
-        }, event, rowMain);
+        window.ChatTocPreviewTooltip.show(
+          {
+            title: item.title,
+            content: item.content,
+          },
+          event,
+          rowMain
+        );
       });
 
       row.addEventListener('mouseleave', () => {
@@ -512,36 +475,29 @@
       }
     }
 
-    // Look for command triggers:
-    // 1. "//" (Double slash command trigger)
-    // 2. "#" (Hash command trigger - requires at least one character after # to trigger)
-    const doubleSlashMatch = textBeforeCursor.match(/(?:^|\s)\/\/([^\s]*)$/);
-    const hashMatch = textBeforeCursor.match(/(?:^|\s)#([a-zA-Z0-9_\u4e00-\u9fa5]+)$/);
+    // Look for command triggers near the cursor.
+    // A trigger is valid at the start of a line or after a natural boundary
+    // such as whitespace or punctuation.
+    const triggerMatch = textBeforeCursor.match(
+      /(^|[\s.,!?;:()[\]{}<>"]|'|`|~|，|。|！|？|；|：|、|（|）|【|】|《|》])((?:\/\/)|#)([^\s]*)$/
+    );
 
-    const prompts = await getMyPrompts();
+    const prompts = sortMyPrompts(await getMyPrompts(), activeSort);
     let matches = [];
-    let triggerText = '';
+    let triggerStart = -1;
 
-    if (doubleSlashMatch) {
-      triggerText = doubleSlashMatch[0];
-      const query = doubleSlashMatch[1].toLowerCase();
+    if (triggerMatch) {
+      triggerStart = triggerMatch.index + triggerMatch[1].length;
+      const query = triggerMatch[3].toLowerCase();
       matches = prompts.filter(
         (p) =>
-          p.title.toLowerCase().includes(query) ||
-          p.content.toLowerCase().includes(query)
-      );
-    } else if (hashMatch) {
-      triggerText = hashMatch[0];
-      const query = hashMatch[1].toLowerCase();
-      matches = prompts.filter(
-        (p) =>
-          p.title.toLowerCase().includes(query) ||
-          p.content.toLowerCase().includes(query)
+          p.title.toLowerCase().startsWith(query) ||
+          p.content.toLowerCase().startsWith(query)
       );
     }
 
     if (matches.length > 0) {
-      showAutocompleteMenu(textarea, matches, triggerText);
+      showAutocompleteMenu(textarea, matches, triggerStart);
     } else {
       closeAutocompleteMenu();
     }
@@ -551,9 +507,9 @@
    * Displays the autocomplete floating overlay.
    * @param {HTMLElement} textarea
    * @param {Array} matches
-   * @param {string} triggerText
+   * @param {number} triggerStart
    */
-  function showAutocompleteMenu(textarea, matches, triggerText) {
+  function showAutocompleteMenu(textarea, matches, triggerStart) {
     filteredPromptsForMenu = matches;
     selectedMenuIndex = Math.min(selectedMenuIndex, matches.length - 1);
 
@@ -571,7 +527,7 @@
     autocompleteMenu.style.width = `${rect.width}px`;
     autocompleteMenu.style.bottom = `${window.innerHeight - rect.top + 8}px`;
     autocompleteMenu.style.display = 'block';
-    autocompleteMenu.dataset.triggerText = triggerText;
+    autocompleteMenu.dataset.triggerStart = String(triggerStart);
   }
 
   /**
@@ -612,7 +568,7 @@
     if (!currentTextarea || !autocompleteMenu) return;
 
     const textarea = currentTextarea;
-    const triggerText = autocompleteMenu.dataset.triggerText || '';
+    const triggerStart = Number(autocompleteMenu.dataset.triggerStart || -1);
 
     isProgrammaticInsert = true;
     try {
@@ -622,13 +578,12 @@
         const textBeforeCursor = text.slice(0, selectionStart);
         const textAfterCursor = text.slice(selectionStart);
 
-        const triggerIndex = textBeforeCursor.lastIndexOf(triggerText);
-        if (triggerIndex !== -1) {
-          const newTextBeforeCursor = textBeforeCursor.slice(0, triggerIndex);
+        if (triggerStart !== -1) {
+          const newTextBeforeCursor = textBeforeCursor.slice(0, triggerStart);
           textarea.focus();
           textarea.value = newTextBeforeCursor + p.content + textAfterCursor;
           textarea.dispatchEvent(new Event('input', { bubbles: true }));
-          const newCursorPos = triggerIndex + p.content.length;
+          const newCursorPos = triggerStart + p.content.length;
           textarea.setSelectionRange(newCursorPos, newCursorPos);
         }
       } else {
@@ -652,14 +607,22 @@
 
           if (textNode && textNode.nodeType === Node.TEXT_NODE) {
             const textContent = textNode.textContent;
-            const offset = range.endContainer === textNode ? range.endOffset : textNode.textContent.length;
+            const offset =
+              range.endContainer === textNode
+                ? range.endOffset
+                : textNode.textContent.length;
             const textBefore = textContent.slice(0, offset);
+            const relativeTriggerMatch = textBefore.match(
+              /(^|[\s.,!?;:()[\]{}<>"]|'|`|~|，|。|！|？|；|：|、|（|）|【|】|《|》])((?:\/\/)|#)([^\s]*)$/
+            );
 
-            const triggerIndex = textBefore.lastIndexOf(triggerText);
-            if (triggerIndex !== -1) {
+            if (relativeTriggerMatch) {
+              const relativeTriggerStart =
+                relativeTriggerMatch.index + relativeTriggerMatch[1].length;
+
               // Select exactly the trigger text (e.g. "//" or "#" or words matching title)
               const replaceRange = document.createRange();
-              replaceRange.setStart(textNode, triggerIndex);
+              replaceRange.setStart(textNode, relativeTriggerStart);
               replaceRange.setEnd(textNode, offset);
 
               selection.removeAllRanges();
@@ -690,7 +653,8 @@
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       e.stopPropagation();
-      selectedMenuIndex = (selectedMenuIndex + 1) % filteredPromptsForMenu.length;
+      selectedMenuIndex =
+        (selectedMenuIndex + 1) % filteredPromptsForMenu.length;
       renderAutocompleteMenuContent();
       scrollActiveAutocompleteItemIntoView();
     } else if (e.key === 'ArrowUp') {
@@ -719,7 +683,9 @@
    * Scroll active menu item into view when navigating via keyboard keys.
    */
   function scrollActiveAutocompleteItemIntoView() {
-    const activeItem = autocompleteMenu.querySelector('.autocomplete-menu-item-active');
+    const activeItem = autocompleteMenu.querySelector(
+      '.autocomplete-menu-item-active'
+    );
     if (activeItem) {
       activeItem.scrollIntoView({ block: 'nearest' });
     }
@@ -733,6 +699,7 @@
       autocompleteMenu.style.display = 'none';
       filteredPromptsForMenu = [];
       selectedMenuIndex = 0;
+      delete autocompleteMenu.dataset.triggerStart;
     }
   }
 
