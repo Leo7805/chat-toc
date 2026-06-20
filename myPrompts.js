@@ -8,6 +8,7 @@
   let selectedMenuIndex = 0;
   let filteredPromptsForMenu = [];
   let currentTextarea = null;
+  let isProgrammaticInsert = false;
 
   /**
    * Helper to check if the extension context is still valid.
@@ -249,36 +250,83 @@
   }
 
   /**
-   * Helper to insert text into ChatGPT's main input textarea.
+   * Helper to insert text into ChatGPT's main input textarea or contenteditable div.
    * @param {string} text
    */
   function insertIntoChatGPTInput(text) {
-    const textarea = document.querySelector('textarea#prompt-textarea');
+    const textarea = document.querySelector('#prompt-textarea');
     if (!textarea) return;
 
-    textarea.focus();
-
-    let textToInsert = text;
-    const currentVal = textarea.value || '';
-
-    if (currentVal.trim() !== '') {
-      // Move cursor to the end of the text
-      textarea.selectionStart = textarea.selectionEnd = currentVal.length;
-      if (currentVal.endsWith('\n')) {
-        textToInsert = text;
-      } else {
-        textToInsert = '\n' + text;
-      }
-    }
-
-    // Use document.execCommand to trigger React input state updates
+    isProgrammaticInsert = true;
     try {
-      document.execCommand('insertText', false, textToInsert);
-    } catch (e) {
-      // Fallback
-      textarea.value = currentVal + textToInsert;
-      textarea.dispatchEvent(new Event('input', { bubbles: true }));
-      textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+      if (textarea.tagName === 'TEXTAREA') {
+        textarea.focus();
+        let textToInsert = text;
+        const currentVal = textarea.value || '';
+
+        if (currentVal.trim() !== '') {
+          // Move cursor to the end of the text
+          textarea.selectionStart = textarea.selectionEnd = currentVal.length;
+          if (currentVal.endsWith('\n')) {
+            textToInsert = text;
+          } else {
+            textToInsert = '\n' + text;
+          }
+        }
+
+        // Use document.execCommand to trigger React input state updates
+        try {
+          document.execCommand('insertText', false, textToInsert);
+        } catch (e) {
+          // Fallback
+          textarea.value = currentVal + textToInsert;
+          textarea.dispatchEvent(new Event('input', { bubbles: true }));
+          textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+        }
+      } else {
+        // For contenteditable div (ChatGPT's ProseMirror editor)
+        textarea.focus();
+        let textToInsert = text;
+        const currentVal = textarea.innerText || '';
+
+        if (currentVal.trim() !== '') {
+          placeCursorAtEnd(textarea);
+          if (currentVal.endsWith('\n')) {
+            textToInsert = text;
+          } else {
+            textToInsert = '\n' + text;
+          }
+        }
+
+        // Use document.execCommand to trigger React input state updates
+        try {
+          document.execCommand('insertText', false, textToInsert);
+        } catch (e) {
+          // Fallback
+          const textNode = document.createTextNode(textToInsert);
+          textarea.appendChild(textNode);
+          textarea.dispatchEvent(new Event('input', { bubbles: true }));
+          placeCursorAtEnd(textarea);
+        }
+      }
+    } finally {
+      isProgrammaticInsert = false;
+    }
+  }
+
+  /**
+   * Helper to place the cursor at the end of a contenteditable element.
+   * @param {HTMLElement} el
+   */
+  function placeCursorAtEnd(el) {
+    el.focus();
+    if (typeof window.getSelection !== 'undefined' && typeof document.createRange !== 'undefined') {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
     }
   }
 
@@ -291,10 +339,14 @@
   async function renderMyPrompts(container, searchQuery = '', onRefresh = () => {}) {
     container.innerHTML = '';
 
-    const sortBar = createSortBar(onRefresh, () => {
-      showDialog(null, onRefresh);
-    });
-    container.appendChild(sortBar);
+    const toolbarContainer = document.getElementById('myprompts-toolbar-container');
+    if (toolbarContainer) {
+      toolbarContainer.innerHTML = '';
+      const sortBar = createSortBar(onRefresh, () => {
+        showDialog(null, onRefresh);
+      });
+      toolbarContainer.appendChild(sortBar);
+    }
 
     let list = await getMyPrompts();
 
@@ -406,6 +458,10 @@
    */
   function initAutocomplete() {
     document.addEventListener('input', (e) => {
+      if (isProgrammaticInsert) {
+        closeAutocompleteMenu();
+        return;
+      }
       const target = e.target;
       if (target && target.id === 'prompt-textarea') {
         currentTextarea = target;
@@ -567,66 +623,70 @@
     const textarea = currentTextarea;
     const triggerText = autocompleteMenu.dataset.triggerText || '';
 
-    if (textarea.tagName === 'TEXTAREA') {
-      const text = textarea.value;
-      const selectionStart = textarea.selectionStart;
-      const textBeforeCursor = text.slice(0, selectionStart);
-      const textAfterCursor = text.slice(selectionStart);
+    isProgrammaticInsert = true;
+    try {
+      if (textarea.tagName === 'TEXTAREA') {
+        const text = textarea.value;
+        const selectionStart = textarea.selectionStart;
+        const textBeforeCursor = text.slice(0, selectionStart);
+        const textAfterCursor = text.slice(selectionStart);
 
-      const triggerIndex = textBeforeCursor.lastIndexOf(triggerText);
-      if (triggerIndex !== -1) {
-        const newTextBeforeCursor = textBeforeCursor.slice(0, triggerIndex);
+        const triggerIndex = textBeforeCursor.lastIndexOf(triggerText);
+        if (triggerIndex !== -1) {
+          const newTextBeforeCursor = textBeforeCursor.slice(0, triggerIndex);
+          textarea.focus();
+          textarea.value = newTextBeforeCursor + p.content + textAfterCursor;
+          textarea.dispatchEvent(new Event('input', { bubbles: true }));
+          const newCursorPos = triggerIndex + p.content.length;
+          textarea.setSelectionRange(newCursorPos, newCursorPos);
+        }
+      } else {
+        // For contenteditable div (ChatGPT's ProseMirror editor)
         textarea.focus();
-        textarea.value = newTextBeforeCursor + p.content + textAfterCursor;
-        textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        const newCursorPos = triggerIndex + p.content.length;
-        textarea.setSelectionRange(newCursorPos, newCursorPos);
-      }
-    } else {
-      // For contenteditable div (ChatGPT's ProseMirror editor)
-      textarea.focus();
-      const selection = window.getSelection();
-      if (selection.rangeCount) {
-        const range = selection.getRangeAt(0);
-        let textNode = range.endContainer;
+        const selection = window.getSelection();
+        if (selection.rangeCount) {
+          const range = selection.getRangeAt(0);
+          let textNode = range.endContainer;
 
-        // If selection container is not a text node (e.g. wrapper element), find the text node
-        if (textNode.nodeType !== Node.TEXT_NODE) {
-          const offset = range.endOffset;
-          if (textNode.childNodes[offset - 1]) {
-            textNode = textNode.childNodes[offset - 1];
-            while (textNode && textNode.nodeType !== Node.TEXT_NODE) {
-              textNode = textNode.lastChild;
+          // If selection container is not a text node (e.g. wrapper element), find the text node
+          if (textNode.nodeType !== Node.TEXT_NODE) {
+            const offset = range.endOffset;
+            if (textNode.childNodes[offset - 1]) {
+              textNode = textNode.childNodes[offset - 1];
+              while (textNode && textNode.nodeType !== Node.TEXT_NODE) {
+                textNode = textNode.lastChild;
+              }
             }
           }
-        }
 
-        if (textNode && textNode.nodeType === Node.TEXT_NODE) {
-          const textContent = textNode.textContent;
-          const offset = range.endContainer === textNode ? range.endOffset : textNode.textContent.length;
-          const textBefore = textContent.slice(0, offset);
+          if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+            const textContent = textNode.textContent;
+            const offset = range.endContainer === textNode ? range.endOffset : textNode.textContent.length;
+            const textBefore = textContent.slice(0, offset);
 
-          const triggerIndex = textBefore.lastIndexOf(triggerText);
-          if (triggerIndex !== -1) {
-            // Select exactly the trigger text (e.g. "//" or "#" or words matching title)
-            const replaceRange = document.createRange();
-            replaceRange.setStart(textNode, triggerIndex);
-            replaceRange.setEnd(textNode, offset);
+            const triggerIndex = textBefore.lastIndexOf(triggerText);
+            if (triggerIndex !== -1) {
+              // Select exactly the trigger text (e.g. "//" or "#" or words matching title)
+              const replaceRange = document.createRange();
+              replaceRange.setStart(textNode, triggerIndex);
+              replaceRange.setEnd(textNode, offset);
 
-            selection.removeAllRanges();
-            selection.addRange(replaceRange);
+              selection.removeAllRanges();
+              selection.addRange(replaceRange);
 
-            // Replace selection with prompt content
+              // Replace selection with prompt content
+              document.execCommand('insertText', false, p.content);
+            }
+          } else {
+            // Direct fallback insertion at current cursor
             document.execCommand('insertText', false, p.content);
           }
-        } else {
-          // Direct fallback insertion at current cursor
-          document.execCommand('insertText', false, p.content);
         }
       }
+    } finally {
+      closeAutocompleteMenu();
+      isProgrammaticInsert = false;
     }
-
-    closeAutocompleteMenu();
   }
 
   /**

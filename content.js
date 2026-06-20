@@ -102,7 +102,6 @@ async function createSidebar() {
           id="navigator-title"
           type="button"
           aria-label="Reset TOC view"
-          title="${conversationTitle}"
         >
           ${conversationTitle}
         </button>
@@ -129,6 +128,7 @@ async function createSidebar() {
         placeholder="Search prompts..."
         autocomplete="off"
       />
+      <div id="myprompts-toolbar-container"></div>
     </div>
 
     <div class="navigator-jump-controls">
@@ -173,7 +173,7 @@ async function createSidebar() {
     });
   document
     .getElementById('navigator-title')
-    .addEventListener('click', resetNavigatorView);
+    .addEventListener('click', handleTitleClick);
   document
     .getElementById('jump-chat-top-btn')
     .addEventListener('click', () =>
@@ -386,7 +386,6 @@ function setNavigatorTitle() {
   const nextTitle = viewMode === 'myPrompts' ? 'MY PROMPTS' : getConversationTitle();
 
   title.textContent = nextTitle;
-  title.title = nextTitle;
 }
 
 /**
@@ -421,6 +420,23 @@ function resetNavigatorView() {
     top: 0,
     behavior: 'smooth',
   });
+}
+
+/**
+ * Click handler for the navigator title.
+ * - In My Prompts view: scrolls the list to the top.
+ * - In TOC view: resets and refreshes the list.
+ */
+function handleTitleClick() {
+  if (viewMode === 'myPrompts') {
+    const list = document.getElementById('navigator-list');
+    list?.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    });
+  } else {
+    resetNavigatorView();
+  }
 }
 
 /**
@@ -1060,6 +1076,11 @@ function toggleViewMode() {
     btn.classList.remove('mode-myprompts-active');
     btn.setAttribute('aria-label', 'Switch to My Prompts');
     btn.title = 'Switch to My Prompts';
+    
+    const toolbarContainer = document.getElementById('myprompts-toolbar-container');
+    if (toolbarContainer) {
+      toolbarContainer.innerHTML = '';
+    }
   }
 
   const searchInput = document.getElementById('navigator-search');
