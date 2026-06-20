@@ -518,9 +518,6 @@
     const doubleSlashMatch = textBeforeCursor.match(/(?:^|\s)\/\/([^\s]*)$/);
     const hashMatch = textBeforeCursor.match(/(?:^|\s)#([a-zA-Z0-9_\u4e00-\u9fa5]+)$/);
 
-    const words = textBeforeCursor.trim().split(/\s+/);
-    const lastWord = words[words.length - 1] || '';
-
     const prompts = await getMyPrompts();
     let matches = [];
     let triggerText = '';
@@ -541,12 +538,6 @@
           p.title.toLowerCase().includes(query) ||
           p.content.toLowerCase().includes(query)
       );
-    } else if (lastWord.length >= 2 && !lastWord.includes('#') && !lastWord.includes('/')) {
-      // Trigger fuzzy title match for typed words of length >= 2, ignoring words containing triggers
-      matches = prompts.filter((p) =>
-        p.title.toLowerCase().includes(lastWord.toLowerCase())
-      );
-      triggerText = lastWord;
     }
 
     if (matches.length > 0) {
