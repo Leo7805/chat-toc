@@ -17,6 +17,8 @@ ChatTOC helps you navigate long conversations by automatically turning your prom
 - Click any prompt to instantly jump to its location
 - Mark important prompts for quick visual reference
 - Search and filter prompts
+- Save and reuse custom prompt templates
+- Autocomplete saved prompts inside ChatGPT's input box
 - Highlights the prompt currently visible in the conversation
 - Preview full prompt content on hover
 - View the full conversation title from the sidebar title tooltip
@@ -53,10 +55,13 @@ ChatTOC helps you navigate long conversations by automatically turning your prom
 2. The ChatTOC sidebar will appear on the right side.
 3. Click a TOC item to jump to that prompt.
 4. Use the search box to filter prompts.
-5. Hover over a truncated prompt to preview the full content.
-6. Drag the left edge of the sidebar to resize it.
-7. Use the sidebar pin button to keep the sidebar open or enable auto-hide.
-8. Hover the floating button to reveal an auto-hidden sidebar, or drag it to reposition it for the current tab.
+5. Switch to My Prompts to manage saved prompt templates.
+6. Right-click a prompt item to add it to My Prompts.
+7. Type `#` or `//` in the ChatGPT input box to autocomplete a saved prompt.
+8. Hover over a truncated prompt to preview the full content.
+9. Drag the left edge of the sidebar to resize it.
+10. Use the sidebar pin button to keep the sidebar open or enable auto-hide.
+11. Hover the floating button to reveal an auto-hidden sidebar, or drag it to reposition it for the current tab.
 
 ---
 

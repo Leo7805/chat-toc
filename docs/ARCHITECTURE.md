@@ -48,16 +48,16 @@ graph TD
 
 - **Purpose**: Declared in `manifest.json`. Runs in a sandboxed context where it can access the DOM and Chrome APIs but not ChatGPT's global Javascript scope.
 - **Module Scripts (injected in sequence)**:
-  - [outline.js](file:///Users/leo/🔥Projects/chrome-plugins/chat-toc/outline.js): Extracts header trees (`H1`-`H6`) from assistant answers and manages outline expands/collapses.
-  - [follow.js](file:///Users/leo/🔥Projects/chrome-plugins/chat-toc/follow.js): Manages scroll tracking on the chat feed and coordinates when the sidebar is allowed to auto-scroll.
-  - [message.js](file:///Users/leo/🔥Projects/chrome-plugins/chat-toc/message.js): Parses ChatGPT's JSON payloads and normalizes user inputs/files/images into TOC labels.
-  - [promptMark.js](file:///Users/leo/🔥Projects/chrome-plugins/chat-toc/promptMark.js): Handles session-scoped prompt marking (flag icon).
-  - [jump.js](file:///Users/leo/🔥Projects/chrome-plugins/chat-toc/jump.js): Controls smooth scrolling to messages, utilizing ChatGPT's native buttons (primary) or direct DOM `scrollIntoView` (fallback).
-  - [tooltip.js](file:///Users/leo/🔥Projects/chrome-plugins/chat-toc/tooltip.js): Shows full-text preview tooltips for truncated prompt lines.
-  - [toggleButton.js](file:///Users/leo/🔥Projects/chrome-plugins/chat-toc/toggleButton.js): Manages the floating circular toggle button and session-bound drag position.
-  - [sidebarVisibility.js](file:///Users/leo/🔥Projects/chrome-plugins/chat-toc/sidebarVisibility.js): Manages sidebar showing, auto-hiding, pinning, and inert accessibility state.
-  - [myPrompts.js](file:///Users/leo/🔥Projects/chrome-plugins/chat-toc/myPrompts.js): Manages persistent custom prompt templates (CRUD modal dialogs, list rendering with sort selectors, and input autocomplete popup).
-  - [content.js](file:///Users/leo/🔥Projects/chrome-plugins/chat-toc/content.js): Entry point. Injects the Main World script, creates the sidebar DOM, and ties all modules together.
+  - [outline.js](../outline.js): Extracts header trees (`H1`-`H6`) from assistant answers and manages outline expands/collapses.
+  - [follow.js](../follow.js): Manages scroll tracking on the chat feed and coordinates when the sidebar is allowed to auto-scroll.
+  - [message.js](../message.js): Parses ChatGPT's JSON payloads and normalizes user inputs/files/images into TOC labels.
+  - [promptMark.js](../promptMark.js): Handles session-scoped prompt marking (flag icon).
+  - [jump.js](../jump.js): Controls smooth scrolling to messages, utilizing ChatGPT's native buttons (primary) or direct DOM `scrollIntoView` (fallback).
+  - [tooltip.js](../tooltip.js): Shows full-text preview tooltips for truncated prompt lines.
+  - [toggleButton.js](../toggleButton.js): Manages the floating circular toggle button and session-bound drag position.
+  - [sidebarVisibility.js](../sidebarVisibility.js): Manages sidebar showing, auto-hiding, pinning, and inert accessibility state.
+  - [myPrompts.js](../myPrompts.js): Manages persistent custom prompt templates (CRUD modal dialogs, list rendering with sort selectors, and input autocomplete popup).
+  - [content.js](../content.js): Entry point. Injects the Main World script, creates the sidebar DOM, and ties all modules together.
 
 ---
 
