@@ -97,7 +97,7 @@
 .navigator-jump-controls {
   position: absolute;
   right: 8px;
-  top: clamp(160px, 38vh, 360px);
+  top: clamp(120px, 30vh, 280px);
   z-index: 2;
   display: flex;
   flex-direction: column;
