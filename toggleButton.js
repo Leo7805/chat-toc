@@ -22,6 +22,7 @@
           d="M48 8A26 26 0 1 1 15 48C29 52 43 43 49 29C52 21 51 13 48 8Z"
         />
       </svg>
+      <span class="toggle-sidebar-label" aria-hidden="true">TOC</span>
     `;
 
     document.body.appendChild(toggleBtn);
