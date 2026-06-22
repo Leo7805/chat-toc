@@ -19,6 +19,9 @@ These states are intentionally designed to be session-bound and scoped to the ac
 ### Consequences
 * The unused `"storage"` permission was removed from `manifest.json` to prevent Chrome Web Store review warnings/rejections.
 * Marked prompts and positions will continue to reset when the tab is closed.
+* Sidebar pin status is shared by every conversation in the same tab session;
+  switching conversations or creating a conversation from a new chat does not
+  change it.
 
 ---
 

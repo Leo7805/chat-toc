@@ -2,7 +2,8 @@
  * Owns ChatTOC sidebar visibility, pinning, and auto-hide behavior.
  */
 (function () {
-  const PINNED_STORAGE_PREFIX = 'chatTocSidebarPinned:';
+  const PINNED_STORAGE_KEY = 'chatTocSidebarPinned';
+  const LEGACY_PINNED_STORAGE_PREFIX = 'chatTocSidebarPinned:';
   const WIDTH_SPOOF_MESSAGE_TYPE = 'CHATGPT_NAVIGATOR_SET_WIDTH_SPOOF';
   const AUTO_HIDE_DELAY_MS = 300;
 
@@ -12,30 +13,20 @@
   let isPinned = true;
   let isHidden = false;
   let hideTimer = 0;
-  let getPageKey = () => location.pathname;
-
   /**
    * @param {HTMLElement} sidebarElement
    * @param {HTMLButtonElement} toggleButton
-   * @param {Object} [options]
-   * @param {() => string} [options.getPageKey]
    */
-  function init(sidebarElement, toggleButton, options = {}) {
+  function init(sidebarElement, toggleButton) {
     sidebar = sidebarElement;
     toggleBtn = toggleButton;
     pinBtn = document.getElementById('sidebar-pin-btn');
-    getPageKey =
-      typeof options.getPageKey === 'function' ? options.getPageKey : getPageKey;
 
     bindPinButton();
     bindToggleButton();
     bindAutoHide();
     loadPinnedState();
     finishInitializing();
-  }
-
-  function syncPageState() {
-    loadPinnedState();
   }
 
   function bindPinButton() {
@@ -118,22 +109,52 @@
     }
 
     if (options.persist) {
-      storageSet(getPinnedStorageKey(), isPinned);
+      storageSet(PINNED_STORAGE_KEY, isPinned);
     }
   }
 
-  function getPinnedStorageKey() {
-    return `${PINNED_STORAGE_PREFIX}${getPageKey()}`;
-  }
-
   function loadPinnedState() {
-    const savedPinned = storageGet(getPinnedStorageKey());
+    const savedPinned = getSavedPinnedState();
     const nextPinned = typeof savedPinned === 'boolean' ? savedPinned : true;
 
     isPinned = nextPinned;
     clearHideTimer();
     updatePinButtonState();
     setHidden(isPinned ? false : true);
+  }
+
+  /**
+   * Loads the tab-wide pin state and migrates the current route's legacy
+   * conversation-scoped value when the tab has not stored a global value yet.
+   * @returns {boolean | null}
+   */
+  function getSavedPinnedState() {
+    const savedPinned = storageGet(PINNED_STORAGE_KEY);
+
+    if (typeof savedPinned === 'boolean') {
+      return savedPinned;
+    }
+
+    const legacyPinned = storageGet(
+      `${LEGACY_PINNED_STORAGE_PREFIX}${getLegacyPageKey()}`
+    );
+
+    if (typeof legacyPinned === 'boolean') {
+      storageSet(PINNED_STORAGE_KEY, legacyPinned);
+      return legacyPinned;
+    }
+
+    return null;
+  }
+
+  /**
+   * Returns the legacy per-conversation storage suffix for one-time migration.
+   * @returns {string}
+   */
+  function getLegacyPageKey() {
+    const match = location.pathname.match(/\/c\/([^/]+)/);
+
+    return match?.[1] || `new-chat:${location.pathname}`;
   }
 
   function updatePinButtonState() {
@@ -247,6 +268,5 @@
     init,
     setHidden,
     setPinned,
-    syncPageState,
   };
 })();

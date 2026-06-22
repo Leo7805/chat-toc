@@ -669,7 +669,6 @@ function resetNavigatorStateForCurrentRoute() {
   // Clear per-conversation state when the route changes.
   conversationMessages = [];
   initMarkedPrompts();
-  window.ChatTocSidebarVisibility?.syncPageState?.();
   activeNavigatorIndex = null;
   window.ChatTocOutline?.reset?.();
   navigatorItems = [];
@@ -1288,9 +1287,7 @@ async function main() {
   listenForRouteChanges();
   initActivePromptTracking();
   const toggleBtn = window.ChatTocToggleButton.create();
-  window.ChatTocSidebarVisibility.init(sidebar, toggleBtn, {
-    getPageKey: getCurrentConversationKey,
-  });
+  window.ChatTocSidebarVisibility.init(sidebar, toggleBtn);
 
   window.ChatTocPreviewTooltip.init({
     anchorSelector: '#navigator-list',
