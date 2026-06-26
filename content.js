@@ -179,23 +179,17 @@ async function createSidebar() {
     .addEventListener('click', handleTitleClick);
   document
     .getElementById('jump-chat-top-btn')
-    .addEventListener('click', () =>
-      window.ChatTocJump.jumpToConversationEdge('top')
-    );
+    .addEventListener('click', () => handleJumpControlClick('top'));
   document
     .getElementById('jump-chat-top-btn')
-    .addEventListener('dblclick', () =>
-      window.ChatTocJump.jumpToAbsoluteEdge('top', 'auto')
-    );
+    .addEventListener('dblclick', () => handleJumpControlDoubleClick('top'));
   document
     .getElementById('jump-chat-bottom-btn')
-    .addEventListener('click', () =>
-      window.ChatTocJump.jumpToConversationEdge('bottom')
-    );
+    .addEventListener('click', () => handleJumpControlClick('bottom'));
   document
     .getElementById('jump-chat-bottom-btn')
     .addEventListener('dblclick', () =>
-      window.ChatTocJump.jumpToAbsoluteEdge('bottom', 'auto')
+      handleJumpControlDoubleClick('bottom')
     );
   document
     .getElementById('toggle-view-mode-btn')
@@ -209,6 +203,47 @@ async function createSidebar() {
     });
 
   return sidebar;
+}
+
+/**
+ * Handles top/bottom jump buttons based on the active sidebar mode.
+ * @param {'top' | 'bottom'} edge
+ */
+function handleJumpControlClick(edge) {
+  if (viewMode === 'myPrompts') {
+    scrollNavigatorListToEdge(edge, 'smooth');
+    return;
+  }
+
+  window.ChatTocJump.jumpToConversationEdge(edge);
+}
+
+/**
+ * Handles jump button double-clicks based on the active sidebar mode.
+ * @param {'top' | 'bottom'} edge
+ */
+function handleJumpControlDoubleClick(edge) {
+  if (viewMode === 'myPrompts') {
+    scrollNavigatorListToEdge(edge, 'auto');
+    return;
+  }
+
+  window.ChatTocJump.jumpToAbsoluteEdge(edge, 'auto');
+}
+
+/**
+ * Scrolls the navigator list itself to an edge.
+ * @param {'top' | 'bottom'} edge
+ * @param {ScrollBehavior} behavior
+ */
+function scrollNavigatorListToEdge(edge, behavior = 'smooth') {
+  const list = document.getElementById('navigator-list');
+  if (!list) return;
+
+  list.scrollTo({
+    top: edge === 'top' ? 0 : list.scrollHeight,
+    behavior,
+  });
 }
 
 /**
