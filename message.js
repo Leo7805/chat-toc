@@ -170,13 +170,38 @@
     }
 
     const orderedNodes = getOrderedConversationNodes(data);
+    const messages = [];
+    let pendingUserMessage = null;
 
-    return orderedNodes
-      .filter((node) => node.message?.author?.role === 'user')
-      .map((node) => {
-        return createNavigatorMessage(node.message);
-      })
-      .filter((message) => message.text.length > 0);
+    function flushPendingUserMessage() {
+      if (!pendingUserMessage) return;
+
+      const navigatorMessage = createNavigatorMessage(pendingUserMessage);
+
+      if (navigatorMessage.text.length > 0) {
+        messages.push(navigatorMessage);
+      }
+
+      pendingUserMessage = null;
+    }
+
+    orderedNodes.forEach((node) => {
+      const message = node.message;
+      const role = message?.author?.role;
+
+      if (!role) return;
+
+      if (role === 'user') {
+        pendingUserMessage = message;
+        return;
+      }
+
+      flushPendingUserMessage();
+    });
+
+    flushPendingUserMessage();
+
+    return messages;
   }
 
   window.ChatTocMessages = {
