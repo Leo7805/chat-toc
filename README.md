@@ -8,7 +8,7 @@ ChatTOC helps you navigate long conversations by automatically turning your prom
 
 [![Release](https://img.shields.io/badge/release-latest-blue)](https://github.com/Leo7805/chat-toc/releases/latest)
 
-![Demo](assets/demo2.gif)
+![Demo](assets/demo-v1.5.gif)
 
 ---
 

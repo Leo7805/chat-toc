@@ -215,6 +215,14 @@ function handleJumpControlClick(edge) {
     return;
   }
 
+  const index = edge === 'top' ? 0 : conversationMessages.length - 1;
+  const message = conversationMessages[index];
+
+  if (message) {
+    window.ChatTocJump.jumpToMessage(message, index);
+    return;
+  }
+
   window.ChatTocJump.jumpToConversationEdge(edge);
 }
 
