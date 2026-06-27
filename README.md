@@ -1,8 +1,8 @@
-# ChatTOC
+# LunaTOC
 
 A lightweight Chrome extension that adds a Table of Contents (TOC) sidebar to ChatGPT conversations.
 
-ChatTOC helps you navigate long conversations by automatically turning your prompts into a searchable, clickable outline.
+LunaTOC helps you navigate long conversations by automatically turning your prompts into a searchable, clickable outline.
 
 👉 [Install from Chrome Web Store](https://chromewebstore.google.com/detail/chattoc/ibfdglfgljonajofiiaonlimoiolkcpa)
 
@@ -48,14 +48,14 @@ ChatTOC helps you navigate long conversations by automatically turning your prom
 
 3. Enable **Developer Mode**.
 4. Click **Load unpacked**.
-5. Select the ChatTOC folder.
+5. Select the LunaTOC folder.
 
 ---
 
 ## Usage
 
 1. Open any ChatGPT conversation.
-2. The ChatTOC sidebar will appear on the right side.
+2. The LunaTOC sidebar will appear on the right side.
 3. Click a TOC item to jump to that prompt.
 4. Use the search box to filter prompts.
 5. Switch to My Prompts to manage saved prompt templates.
@@ -69,11 +69,11 @@ ChatTOC helps you navigate long conversations by automatically turning your prom
 
 ---
 
-## Why ChatTOC?
+## Why LunaTOC?
 
 ChatGPT conversations can become very long, making it difficult to find previous prompts.
 
-ChatTOC provides a lightweight navigation layer that lets you:
+LunaTOC provides a lightweight navigation layer that lets you:
 
 - Quickly revisit earlier questions
 - Navigate long technical discussions
@@ -95,7 +95,7 @@ ChatTOC provides a lightweight navigation layer that lets you:
 
 ## Privacy
 
-ChatTOC runs entirely in your browser.
+LunaTOC runs entirely in your browser.
 
 No conversation data is collected, stored, transmitted, or shared with any external service.
 
