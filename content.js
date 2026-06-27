@@ -274,6 +274,8 @@ function initNavigatorJump() {
   window.ChatTocJump.init({
     getNativePromptButtons,
     normalizeText,
+    findConversationIndexByElement,
+    getConversationMessageCount: () => conversationMessages.length,
     lockActiveIndex: lockActiveNavigatorItem,
   });
 }

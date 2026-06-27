@@ -6,18 +6,26 @@
   let lastNonTextHighlightElement = null;
   let getNativePromptButtons = () => [];
   let normalizeText = (text) => text;
+  let findConversationIndexByElement = () => -1;
+  let getConversationMessageCount = () => 0;
   let lockActiveIndex = () => {};
+  let virtualScanToken = 0;
+  const debugStorageKey = 'chatTocDebugJump';
 
   /**
    * Connects jump behavior to content.js state and native TOC helpers.
    * @param {Object} options
    * @param {() => HTMLElement[]} options.getNativePromptButtons
    * @param {(text: string) => string} options.normalizeText
+   * @param {(element: HTMLElement) => number} options.findConversationIndexByElement
+   * @param {() => number} options.getConversationMessageCount
    * @param {(index: number, duration?: number) => void} options.lockActiveIndex
    */
   function init(options) {
     getNativePromptButtons = options.getNativePromptButtons;
     normalizeText = options.normalizeText;
+    findConversationIndexByElement = options.findConversationIndexByElement;
+    getConversationMessageCount = options.getConversationMessageCount;
     lockActiveIndex = options.lockActiveIndex;
   }
 
@@ -36,20 +44,7 @@
       return;
     }
 
-    const messages = Array.from(
-      document.querySelectorAll('[data-message-author-role="user"]')
-    );
-
-    if (messages.length > 0) {
-      const targetElement = edge === 'top' ? messages[0] : messages.at(-1);
-
-      if (targetElement) {
-        targetElement.scrollIntoView({
-          behavior: 'smooth',
-          block: 'center',
-        });
-      }
-    }
+    jumpToAbsoluteEdge(edge, 'smooth');
   }
 
   /**
@@ -69,13 +64,15 @@
   /**
    * Scrolls to the given element and applies a temporary highlight effect.
    * @param {HTMLElement} element
+   * @param {ScrollBehavior} [behavior='smooth']
+   * @param {ScrollLogicalPosition} [block='center']
    */
-  function scrollToMatchedElement(element) {
+  function scrollToMatchedElement(element, behavior = 'smooth', block = 'center') {
     window.ChatTocFollow.keepFollowing();
 
     element.scrollIntoView({
-      behavior: 'smooth',
-      block: 'center',
+      behavior,
+      block,
     });
 
     highlightMatchedElement(element);
@@ -102,6 +99,13 @@
     }
 
     if (message.canMatchByText && jumpToUserMessageByText(message.text)) return;
+
+    if (
+      message.canMatchByText &&
+      jumpToUserMessageByVirtualScan(message, index)
+    ) {
+      return;
+    }
 
     jumpToVisibleUserMessageByIndex(index);
   }
@@ -148,12 +152,30 @@
   }
 
   /**
+   * Logs jump fallback diagnostics when explicitly enabled in localStorage.
+   * @param {string} eventName
+   * @param {Object} details
+   */
+  function debugJump(eventName, details = {}) {
+    try {
+      if (window.localStorage.getItem(debugStorageKey) !== '1') return;
+      console.debug('[LunaTOC jump]', eventName, details);
+    } catch (e) {
+      // Ignore debug logging failures.
+    }
+  }
+
+  /**
    * Fallback for already-rendered messages: find a user message whose DOM text
    * matches the captured prompt text.
    * @param {string} text
+   * @param {Object} [options]
+   * @param {ScrollBehavior} [options.behavior='smooth']
+   * @param {ScrollLogicalPosition} [options.block='center']
    * @returns {boolean} true if jump succeeded, false otherwise.
    */
-  function jumpToUserMessageByText(text) {
+  function jumpToUserMessageByText(text, options = {}) {
+    const { behavior = 'smooth', block = 'center' } = options;
     const targetText = normalizeText(text);
 
     const userMessageElements = Array.from(
@@ -169,7 +191,7 @@
       return false;
     }
 
-    scrollToMatchedElement(matchedElement);
+    scrollToMatchedElement(matchedElement, behavior, block);
     return true;
   }
 
@@ -184,6 +206,10 @@
       document.querySelectorAll('[data-message-author-role="user"]')
     );
 
+    if (messages.length !== getConversationMessageCount()) {
+      return false;
+    }
+
     const message = messages[index];
 
     if (!message) {
@@ -192,6 +218,342 @@
 
     scrollToMatchedElement(message);
     return true;
+  }
+
+  /**
+   * Searches virtualized conversations by scrolling until the target text is
+   * rendered, then uses the regular DOM text match.
+   * @param {Object} message
+   * @param {number} index
+   * @returns {boolean} true when a scan was started or the target was found.
+   */
+  function jumpToUserMessageByVirtualScan(message, index) {
+    const container = getChatScrollContainer();
+    const messageCount = getConversationMessageCount();
+
+    if (!container) {
+      debugJump('virtual-scan:no-container', { index });
+      return false;
+    }
+
+    const edge = getTargetEdge(index, messageCount);
+    if (edge) {
+      jumpToVirtualScanEdge(message.text, container, edge);
+      return true;
+    }
+
+    const edgeScan = getAdjacentEdgeScan(container, index, messageCount);
+    const direction = edgeScan?.direction || getVirtualScanDirection(index);
+    const token = ++virtualScanToken;
+    const step = Math.max(window.innerHeight * 0.85, 1200);
+    const maxAttempts = 24;
+    const initialTop =
+      edgeScan?.initialTop ?? getEstimatedScrollTop(container, index, messageCount);
+
+    window.ChatTocFollow.keepFollowing(4500);
+
+    if (initialTop !== null) {
+      container.scrollTo({
+        top: initialTop,
+        behavior: 'auto',
+      });
+    }
+
+    debugJump('virtual-scan:start', {
+      index,
+      direction,
+      step,
+      attempts: maxAttempts,
+      initialTop,
+      edgeScan: edgeScan?.edge || null,
+      scrollTop: container.scrollTop,
+      scrollHeight: container.scrollHeight,
+      clientHeight: container.clientHeight,
+      container: getDebugElementLabel(container),
+    });
+
+    scanForRenderedMessage(message.text, {
+      container,
+      direction,
+      step,
+      attempts: maxAttempts,
+      token,
+    });
+
+    return true;
+  }
+
+  /**
+   * Returns the absolute edge for first/last prompt targets.
+   * @param {number} index
+   * @param {number} messageCount
+   * @returns {'top' | 'bottom' | null}
+   */
+  function getTargetEdge(index, messageCount) {
+    if (index === 0) return 'top';
+    if (messageCount > 0 && index === messageCount - 1) return 'bottom';
+
+    return null;
+  }
+
+  /**
+   * Handles first/last prompt targets with an absolute edge jump, then retries
+   * text matching after ChatGPT has mounted the edge content.
+   * @param {string} text
+   * @param {HTMLElement} container
+   * @param {'top' | 'bottom'} edge
+   */
+  function jumpToVirtualScanEdge(text, container, edge) {
+    const token = ++virtualScanToken;
+    const targetTop = edge === 'top' ? 0 : container.scrollHeight;
+
+    window.ChatTocFollow.keepFollowing(2500);
+    container.scrollTo({
+      top: targetTop,
+      behavior: 'auto',
+    });
+
+    debugJump('virtual-scan:edge-jump', {
+      edge,
+      targetTop,
+      scrollTop: container.scrollTop,
+      scrollHeight: container.scrollHeight,
+      clientHeight: container.clientHeight,
+      container: getDebugElementLabel(container),
+    });
+
+    retryFindRenderedMessage(text, {
+      container,
+      token,
+      attempts: 10,
+      delay: 120,
+    });
+  }
+
+  /**
+   * Estimates a useful starting scrollTop for middle prompt scan fallback.
+   * @param {HTMLElement} container
+   * @param {number} index
+   * @param {number} messageCount
+   * @returns {number | null}
+   */
+  function getEstimatedScrollTop(container, index, messageCount) {
+    if (messageCount <= 1) return null;
+
+    const maxTop = Math.max(0, container.scrollHeight - container.clientHeight);
+    const ratio = index / (messageCount - 1);
+
+    return Math.max(0, Math.min(maxTop, maxTop * ratio));
+  }
+
+  /**
+   * Starts near-edge prompt scans from the nearest absolute edge instead of a
+   * proportional estimate, which is unstable for very long messages.
+   * @param {HTMLElement} container
+   * @param {number} index
+   * @param {number} messageCount
+   * @returns {{edge: string, initialTop: number, direction: 1 | -1} | null}
+   */
+  function getAdjacentEdgeScan(container, index, messageCount) {
+    if (index === 1) {
+      return {
+        edge: 'top-adjacent',
+        initialTop: 0,
+        direction: 1,
+      };
+    }
+
+    if (messageCount > 2 && index === messageCount - 2) {
+      return {
+        edge: 'bottom-adjacent',
+        initialTop: container.scrollHeight,
+        direction: -1,
+      };
+    }
+
+    return null;
+  }
+
+  /**
+   * Chooses the scan direction by comparing the target index with the currently
+   * centered rendered prompt index.
+   * @param {number} targetIndex
+   * @returns {1 | -1}
+   */
+  function getVirtualScanDirection(targetIndex) {
+    const centeredIndex = getCenteredVisibleConversationIndex();
+
+    if (centeredIndex !== -1 && targetIndex < centeredIndex) {
+      return -1;
+    }
+
+    return 1;
+  }
+
+  /**
+   * Returns the mapped conversation index closest to the viewport center.
+   * @returns {number}
+   */
+  function getCenteredVisibleConversationIndex() {
+    const messages = Array.from(
+      document.querySelectorAll('[data-message-author-role="user"]')
+    );
+
+    if (messages.length === 0) return -1;
+
+    const viewportCenter = window.innerHeight / 2;
+    const indexedMessages = messages
+      .map((element) => {
+        const index = findConversationIndexByElement(element);
+        const rect = element.getBoundingClientRect();
+        const center = rect.top + rect.height / 2;
+
+        return {
+          index,
+          distance: Math.abs(center - viewportCenter),
+        };
+      })
+      .filter((item) => item.index !== -1)
+      .sort((a, b) => a.distance - b.distance);
+
+    return indexedMessages[0]?.index ?? -1;
+  }
+
+  /**
+   * Repeatedly advances the scroll container until the target prompt is rendered.
+   * @param {string} text
+   * @param {Object} options
+   * @param {HTMLElement} options.container
+   * @param {1 | -1} options.direction
+   * @param {number} options.step
+   * @param {number} options.attempts
+   * @param {number} options.token
+   */
+  function scanForRenderedMessage(text, options) {
+    if (options.token !== virtualScanToken) {
+      debugJump('virtual-scan:stale-token', {
+        token: options.token,
+        activeToken: virtualScanToken,
+      });
+      return;
+    }
+
+    if (
+      jumpToUserMessageByText(text, {
+        behavior: 'auto',
+        block: 'center',
+      })
+    ) {
+      debugJump('virtual-scan:target-found', {
+        attemptsRemaining: options.attempts,
+        scrollTop: options.container.scrollTop,
+      });
+      return;
+    }
+
+    if (options.attempts <= 0) {
+      debugJump('virtual-scan:max-attempts', {
+        scrollTop: options.container.scrollTop,
+      });
+      return;
+    }
+
+    const currentTop = options.container.scrollTop;
+    const maxTop = Math.max(
+      0,
+      options.container.scrollHeight - options.container.clientHeight
+    );
+    const nextTop =
+      options.direction === 1
+        ? Math.min(currentTop + options.step, maxTop)
+        : Math.max(currentTop - options.step, 0);
+
+    debugJump('virtual-scan:step', {
+      attemptsRemaining: options.attempts,
+      direction: options.direction,
+      currentTop,
+      nextTop,
+      maxTop,
+      scrollHeight: options.container.scrollHeight,
+      clientHeight: options.container.clientHeight,
+    });
+
+    if (Math.abs(nextTop - currentTop) < 1) {
+      debugJump('virtual-scan:edge-reached', {
+        currentTop,
+        nextTop,
+        maxTop,
+        direction: options.direction,
+      });
+      return;
+    }
+
+    options.container.scrollTo({
+      top: nextTop,
+      behavior: 'auto',
+    });
+
+    setTimeout(() => {
+      scanForRenderedMessage(text, {
+        ...options,
+        attempts: options.attempts - 1,
+      });
+    }, 90);
+  }
+
+  /**
+   * Retries matching rendered text after a direct edge or estimated jump.
+   * @param {string} text
+   * @param {Object} options
+   * @param {HTMLElement} options.container
+   * @param {number} options.token
+   * @param {number} options.attempts
+   * @param {number} options.delay
+   */
+  function retryFindRenderedMessage(text, options) {
+    if (options.token !== virtualScanToken) return;
+
+    if (
+      jumpToUserMessageByText(text, {
+        behavior: 'auto',
+        block: 'center',
+      })
+    ) {
+      debugJump('virtual-scan:target-found-after-jump', {
+        attemptsRemaining: options.attempts,
+        scrollTop: options.container.scrollTop,
+      });
+      return;
+    }
+
+    if (options.attempts <= 0) {
+      debugJump('virtual-scan:retry-miss', {
+        scrollTop: options.container.scrollTop,
+      });
+      return;
+    }
+
+    setTimeout(() => {
+      retryFindRenderedMessage(text, {
+        ...options,
+        attempts: options.attempts - 1,
+      });
+    }, options.delay);
+  }
+
+  /**
+   * Returns a compact element label for debug output.
+   * @param {HTMLElement} element
+   * @returns {string}
+   */
+  function getDebugElementLabel(element) {
+    const id = element.id ? `#${element.id}` : '';
+    const className =
+      typeof element.className === 'string'
+        ? `.${element.className.trim().replace(/\s+/g, '.')}`
+        : '';
+
+    return `${element.tagName.toLowerCase()}${id}${className}`;
   }
 
   /**

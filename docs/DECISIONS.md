@@ -43,21 +43,31 @@ Polling timers keep the CPU awake, which degrades system idle states and laptop 
 
 ---
 
-## ADR 03: Element-Based Viewport Edge Scrolling (Fallback)
+## ADR 03: Fallback Navigation Without Native Prompt Buttons
 * **Date**: 2026-06-19
+* **Updated**: 2026-06-27
 
 ### Context
 If ChatGPT's native navigation outline buttons cannot be found in the DOM, jumping to the top or bottom of the chat fell back to `window.scrollTo`. However, ChatGPT locks the page window height at `100vh` and scrolls a nested division container instead. Thus, `window.scrollTo` had no scrolling effect.
 
+ChatGPT can also virtualize long conversations before its native prompt navigator appears. In that state, only a subset of user prompt nodes exists in the DOM, so index-based `scrollIntoView()` fallbacks can target the wrong rendered prompt or fail to find the target.
+
 ### Decision
-Query the first/last user prompt messages in the DOM (`[data-message-author-role="user"]`) and call `.scrollIntoView({ behavior: 'smooth', block: 'center' })` on them as the fallback.
+Keep ChatGPT's native prompt navigator as the preferred path whenever its buttons exist.
+
+When native prompt buttons are unavailable:
+
+* Top/bottom controls scroll the detected ChatGPT scroll container directly to its absolute edge.
+* Text prompt navigation first tries to match currently rendered DOM text, then performs a bounded virtual-list scan by scrolling until the target prompt text is rendered.
+* Index-based DOM fallback is only used when all conversation prompts are currently rendered.
 
 ### Rationale
-`scrollIntoView()` automatically instructs the browser to find whichever nested parent container is actually scrollable and scroll it, making the fallback robust and container-selector agnostic.
+Native prompt buttons remain the only reliable way to navigate virtualized file/image prompts, so they stay first priority. Direct scroll-container edge jumps are more reliable than `scrollIntoView()` when the first or last prompt is not currently rendered. Text-based bounded scanning handles the virtualized/no-native-TOC gap without relying on inaccurate scroll-height ratios.
 
 ### Consequences
-* Fallback edge-jumping now functions correctly even if ChatGPT modifies its layout containers.
-* The extension maintains its primary path of clicking ChatGPT's native navigation buttons (which supports React virtualized list mounting) and only falls back to element-based scrolling when native buttons are absent.
+* Top/bottom fallback works even when the first or last prompt is not mounted in the DOM.
+* Text prompt fallback can navigate through virtualized conversations when native prompt buttons are absent.
+* File/image prompt navigation remains limited without ChatGPT's native prompt buttons because those prompts lack a stable text anchor.
 
 ---
 
