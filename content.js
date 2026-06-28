@@ -1090,7 +1090,40 @@ function findConversationIndexByElement(element) {
  * @returns {HTMLElement[]}
  */
 function getNativePromptButtons() {
-  return Array.from(document.querySelectorAll(NATIVE_PROMPT_BUTTON_SELECTOR));
+  const buttons = Array.from(
+    document.querySelectorAll(NATIVE_PROMPT_BUTTON_SELECTOR)
+  ).filter(isUsableNativePromptButton);
+  const indexedButtons = [];
+
+  buttons.forEach((button) => {
+    const index = getNativePromptIndexFromButton(button);
+
+    if (index === -1 || indexedButtons[index]) return;
+
+    indexedButtons[index] = button;
+  });
+
+  return indexedButtons.length > 0 ? indexedButtons : buttons;
+}
+
+/**
+ * Returns whether a native prompt button can be clicked like a visible user
+ * control.
+ * @param {HTMLElement} button
+ * @returns {boolean}
+ */
+function isUsableNativePromptButton(button) {
+  if (!button.isConnected || button.disabled) return false;
+  if (button.closest('[aria-hidden="true"], [inert]')) return false;
+  if (button.getClientRects().length === 0) return false;
+
+  const style = window.getComputedStyle(button);
+
+  return (
+    style.display !== 'none' &&
+    style.visibility !== 'hidden' &&
+    style.pointerEvents !== 'none'
+  );
 }
 
 /**

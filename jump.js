@@ -210,16 +210,7 @@
    */
   function jumpToUserMessageByText(text, options = {}) {
     const { behavior = 'smooth', block = 'center' } = options;
-    const targetText = normalizeTextForMatch(text);
-
-    const userMessageElements = Array.from(
-      document.querySelectorAll('[data-message-author-role="user"]')
-    );
-
-    const matchedElement = userMessageElements.find((element) => {
-      const domText = normalizeTextForMatch(element.innerText);
-      return isTextMatch(domText, targetText);
-    });
+    const matchedElement = findUserMessageByText(text);
 
     if (!matchedElement) {
       return false;
@@ -227,6 +218,58 @@
 
     scrollToMatchedElement(matchedElement, behavior, block);
     return true;
+  }
+
+  /**
+   * Highlights a rendered user message by text without changing scroll position.
+   * @param {string} text
+   * @returns {boolean} true if a visible rendered target was highlighted.
+   */
+  function highlightVisibleUserMessageByText(text) {
+    const matchedElement = findUserMessageByText(text, {
+      requireVisible: true,
+    });
+
+    if (!matchedElement) {
+      return false;
+    }
+
+    highlightMatchedElement(matchedElement);
+    return true;
+  }
+
+  /**
+   * Finds a rendered user message whose DOM text matches the captured prompt.
+   * @param {string} text
+   * @param {Object} [options]
+   * @param {boolean} [options.requireVisible=false]
+   * @returns {HTMLElement | null}
+   */
+  function findUserMessageByText(text, options = {}) {
+    const { requireVisible = false } = options;
+    const targetText = normalizeTextForMatch(text);
+
+    return Array.from(
+      document.querySelectorAll('[data-message-author-role="user"]')
+    ).find((element) => {
+      if (requireVisible && !isElementVisibleInViewport(element)) {
+        return false;
+      }
+
+      const domText = normalizeTextForMatch(element.innerText);
+      return isTextMatch(domText, targetText);
+    }) || null;
+  }
+
+  /**
+   * Returns whether an element is visibly inside the viewport.
+   * @param {HTMLElement} element
+   * @returns {boolean}
+   */
+  function isElementVisibleInViewport(element) {
+    const rect = element.getBoundingClientRect();
+
+    return rect.bottom > 0 && rect.top < window.innerHeight;
   }
 
   /**
@@ -639,9 +682,14 @@
     message,
     index,
     startElement = null,
-    attempts = 14
+    attempts = message.canMatchByText ? 28 : 14
   ) {
-    if (message.canMatchByText && jumpToUserMessageByText(message.text)) return;
+    if (
+      message.canMatchByText &&
+      highlightVisibleUserMessageByText(message.text)
+    ) {
+      return;
+    }
 
     if (
       !message.canMatchByText &&
